@@ -5,7 +5,6 @@ import { findAccountWithPlan, insertAccount } from "../repositories/accounts.rep
 import { insertApiKey } from "../repositories/api-keys.repo.js";
 import { findPlanById, findPredefinedPlan, type PlanRow } from "../repositories/plans.repo.js";
 
-/** Plan given to a new account when the caller does not choose one (documented in the README). */
 export const DEFAULT_ACCOUNT_PLAN = "Starter";
 
 export interface PlanView {
@@ -32,11 +31,7 @@ export const toPlanView = (p: PlanRow): PlanView => ({
   predefined: p.ownerAccountId === null,
 });
 
-/**
- * Creates an account and its first API key in ONE transaction: either both
- * exist or neither does. The full key is returned here and nowhere else —
- * only its hash is stored.
- */
+
 export async function createAccount(db: Db, input: { name: string; planId?: string }) {
   return db.transaction(async (tx) => {
     const plan = input.planId
@@ -46,8 +41,7 @@ export async function createAccount(db: Db, input: { name: string; planId?: stri
     if (!input.planId && !plan) {
       throw new Error(`Default plan "${DEFAULT_ACCOUNT_PLAN}" is missing: the seed did not run`);
     }
-    // A brand-new account owns no plans, so only PREDEFINED plans are allowed here.
-    // Another account's custom plan is reported as "not found" so its existence is not revealed.
+   
     if (!plan || plan.ownerAccountId !== null || plan.archivedAt !== null) {
       throw new NotFoundError("plan_not_found", "Plan not found");
     }

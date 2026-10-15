@@ -2,9 +2,6 @@ import pg from "pg";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../db/schema.js";
 
-// Counters/limits are `integer`, so pg's default int4 parsing returns JS numbers.
-// If a bigint column is ever read into JS numbers, handle it explicitly (pg returns int8 as string).
-
 export type Pool = pg.Pool;
 export type Db = NodePgDatabase<typeof schema>;
 

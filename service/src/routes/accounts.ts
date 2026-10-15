@@ -3,7 +3,7 @@ import type { Db } from "../config/database.js";
 import type { Config } from "../config/env.js";
 import { requireAdmin } from "../middlewares/admin-auth.js";
 import { requireApiKey } from "../middlewares/api-key-auth.js";
-import { createAccountBody } from "../schemas/accounts.js";
+import { createAccountBody } from "../validators/accounts.js";
 import { createAccount, getAccount } from "../services/account.service.js";
 
 export const accountRoutes = (deps: { db: Db; config: Config }): FastifyPluginAsync => async (app) => {

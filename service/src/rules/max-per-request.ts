@@ -1,6 +1,5 @@
 import type { Rule, Scope } from "./types.js";
 
-/** The request itself may not be larger than the plan's per-request limit. */
 export const maxPerRequest = (scope: Scope): Rule => ({
   scope,
   name: "max_per_request",

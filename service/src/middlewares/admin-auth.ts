@@ -4,7 +4,6 @@ import { UnauthorizedError } from "../errors/app-error.js";
 
 const digest = (s: string) => createHash("sha256").update(s).digest();
 
-/** Protects operator-only endpoints (creating accounts) with the ADMIN_TOKEN from the environment. */
 export function requireAdmin(adminToken: string) {
   const expected = digest(adminToken);
   return async (req: FastifyRequest): Promise<void> => {

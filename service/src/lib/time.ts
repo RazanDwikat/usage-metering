@@ -1,8 +1,4 @@
-/**
- * The ONLY place that decides which month a request belongs to.
- * Everything is UTC. `now` is a parameter (not `new Date()` inside) so tests
- * can pass any instant, e.g. the last millisecond of a month.
- */
+
 
 const pad = (n: number) => String(n).padStart(2, "0");
 

@@ -3,17 +3,15 @@ import type { Config } from "./config/env.js";
 import type { Db, Pool } from "./config/database.js";
 import { registerErrorHandling } from "./middlewares/error-handler.js";
 import { accountRoutes } from "./routes/accounts.js";
+import { userRoutes } from "./routes/users.js";
 
 export interface AppDeps {
   config: Config;
   pool: Pool;
-  db: Db; // typed query builder (same pool), used by the routes/services
+  db: Db; 
 }
 
-/**
- * Builds the Fastify app WITHOUT listening, so tests can use app.inject().
- * Add new route modules to the /v1 section below.
- */
+
 export function buildApp({ config, pool, db }: AppDeps): FastifyInstance {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
   app.decorateRequest("accountId", "");
@@ -25,6 +23,6 @@ export function buildApp({ config, pool, db }: AppDeps): FastifyInstance {
   });
 
   app.register(accountRoutes({ db, config }), { prefix: "/v1" });
-
+  app.register(userRoutes({ db }), { prefix: "/v1/users" });
   return app;
 }

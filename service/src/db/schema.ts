@@ -1,9 +1,4 @@
-/**
- * Drizzle mirror of drizzle/*.sql — used for TYPED queries only.
- * The SQL migrations are the source of truth (they contain things Drizzle
- * can't express well: NULLS NOT DISTINCT, composite FKs, CHECKs, partial
- * indexes). test/integration/schema.test.ts fails if columns drift apart.
- */
+
 import {
   bigint,
   boolean,
