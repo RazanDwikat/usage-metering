@@ -4,6 +4,7 @@ import type { Db, Pool } from "./config/database.js";
 import { registerErrorHandling } from "./middlewares/error-handler.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { userRoutes } from "./routes/users.js";
+import { planRoutes } from "./routes/plans.js";
 
 export interface AppDeps {
   config: Config;
@@ -24,5 +25,6 @@ export function buildApp({ config, pool, db }: AppDeps): FastifyInstance {
 
   app.register(accountRoutes({ db, config }), { prefix: "/v1" });
   app.register(userRoutes({ db }), { prefix: "/v1/users" });
+  app.register(planRoutes({ db }), { prefix: "/v1/plans" });
   return app;
 }

@@ -7,6 +7,7 @@ import {
 } from "../errors/app-error.js";
 import {
   findPlanById,
+  findPlanByIdForUpdate,
   findPredefinedPlan,
   type PlanRow,
 } from "../repositories/plans.repo.js";
@@ -61,14 +62,22 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
+
 async function getUsableUserPlan(
   ex: Executor,
   accountId: string,
   planId?: string,
 ): Promise<PlanRow> {
-  const plan = planId
+  const selectedPlan = planId
     ? await findPlanById(ex, planId)
     : await findPredefinedPlan(ex, "user", DEFAULT_USER_PLAN);
+
+  if (!selectedPlan) {
+    throw new NotFoundError("plan_not_found", "Plan not found");
+  }
+
+  // Lock the plan row, then validate its current state.
+  const plan = await findPlanByIdForUpdate(ex, selectedPlan.id);
 
   if (!plan || plan.archivedAt !== null) {
     throw new NotFoundError("plan_not_found", "Plan not found");
@@ -90,6 +99,7 @@ async function getUsableUserPlan(
 
   return plan;
 }
+
 
 export async function createUser(
   db: Db,
