@@ -301,6 +301,74 @@ describe("PATCH /v1/plans/:id", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it("applies updated plan limits to subsequent consume requests", async () => {
+  const { apiKey } = await newAccount("plans-live-update");
+
+  const createdPlan = await createPlan(apiKey.key, {
+    name: "Live update plan",
+    scope: "user",
+    monthlyLimit: 1000,
+    maxPerRequest: 100,
+  });
+
+  expect(createdPlan.statusCode).toBe(201);
+
+  const planId = createdPlan.json().plan.id as string;
+
+  const userRes = await h.app.inject({
+    method: "POST",
+    url: "/v1/users",
+    headers: { "x-api-key": apiKey.key },
+    payload: {
+      externalId: "live-update-employee",
+      planId,
+    },
+  });
+
+  expect(userRes.statusCode).toBe(201);
+
+  const firstConsume = await h.app.inject({
+    method: "POST",
+    url: "/v1/consume",
+    headers: { "x-api-key": apiKey.key },
+    payload: {
+      requestId: "live-update-before",
+      externalId: "live-update-employee",
+      units: 50,
+    },
+  });
+
+  expect(firstConsume.statusCode).toBe(200);
+  expect(firstConsume.json().accepted).toBe(true);
+
+  const updateRes = await plansRequest(
+    "PATCH",
+    `/v1/plans/${planId}`,
+    apiKey.key,
+    {
+      monthlyLimit: 40,
+      maxPerRequest: 40,
+    },
+  );
+
+  expect(updateRes.statusCode).toBe(200);
+
+  const secondConsume = await h.app.inject({
+    method: "POST",
+    url: "/v1/consume",
+    headers: { "x-api-key": apiKey.key },
+    payload: {
+      requestId: "live-update-after",
+      externalId: "live-update-employee",
+      units: 1,
+    },
+  });
+
+  expect(secondConsume.statusCode).toBe(200);
+  expect(secondConsume.json().accepted).toBe(false);
+  expect(secondConsume.json().rejection).toMatchObject({scope: "user",rule: "monthly_allowance",});
+  });
+
   it("rejects an empty update", async () => {
     const { apiKey } = await newAccount("plans-empty-update");
     const created = await createPlan(apiKey.key);

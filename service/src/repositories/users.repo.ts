@@ -120,3 +120,25 @@ export async function softDeleteUser(
 
   return row ?? null;
 }
+
+
+export async function findUserByExternalIdForUpdate(
+  tx: Executor,
+  accountId: string,
+  externalId: string,
+): Promise<UserRow | null> {
+  const [row] = await tx
+    .select()
+    .from(users)
+    .where(
+      and(
+        eq(users.accountId, accountId),
+        eq(users.externalId, externalId),
+        isNull(users.deletedAt),
+      ),
+    )
+    .limit(1)
+    .for("update");
+
+  return row ?? null;
+}
