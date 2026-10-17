@@ -1,10 +1,9 @@
 import type { Db } from "../config/database.js";
 import { BadRequestError, NotFoundError } from "../errors/app-error.js";
 import { generateApiKey } from "../lib/api-key.js";
-import { findAccountWithPlan, insertAccount } from "../repositories/accounts.repo.js";
 import { insertApiKey } from "../repositories/api-keys.repo.js";
 import { findPlanById, findPredefinedPlan, type PlanRow } from "../repositories/plans.repo.js";
-
+import {findAccountWithPlan,insertAccount,updateAccountPlan,} from "../repositories/accounts.repo.js";
 export const DEFAULT_ACCOUNT_PLAN = "Starter";
 
 export interface PlanView {
@@ -69,4 +68,63 @@ export async function getAccount(db: Db, accountId: string): Promise<AccountView
     createdAt: row.account.createdAt.toISOString(),
     plan: toPlanView(row.plan),
   };
+}
+
+
+export async function changeAccountPlan(
+  db: Db,
+  accountId: string,
+  planId: string,
+): Promise<AccountView> {
+  return db.transaction(async (tx) => {
+    const account = await findAccountWithPlan(tx, accountId);
+
+    if (!account) {
+      throw new NotFoundError(
+        "account_not_found",
+        "Account not found",
+      );
+    }
+
+    const plan = await findPlanById(tx, planId);
+
+    if (
+      !plan ||
+      plan.archivedAt !== null ||
+      (plan.ownerAccountId !== null &&
+        plan.ownerAccountId !== accountId)
+    ) {
+      throw new NotFoundError(
+        "plan_not_found",
+        "Plan not found",
+      );
+    }
+
+    if (plan.scope !== "account") {
+      throw new BadRequestError(
+        "plan_scope_mismatch",
+        "This is a user plan; accounts need an account plan",
+      );
+    }
+
+    const updated = await updateAccountPlan(
+      tx,
+      accountId,
+      plan.id,
+    );
+
+    if (!updated) {
+      throw new NotFoundError(
+        "account_not_found",
+        "Account not found",
+      );
+    }
+
+    return {
+      id: updated.id,
+      name: updated.name,
+      createdAt: updated.createdAt.toISOString(),
+      plan: toPlanView(plan),
+    };
+  });
 }

@@ -3,8 +3,8 @@ import type { Db } from "../config/database.js";
 import type { Config } from "../config/env.js";
 import { requireAdmin } from "../middlewares/admin-auth.js";
 import { requireApiKey } from "../middlewares/api-key-auth.js";
-import { createAccountBody } from "../validators/accounts.js";
-import { createAccount, getAccount } from "../services/account.service.js";
+import {changeAccountPlan,createAccount,getAccount,} from "../services/account.service.js";
+import {createAccountBody,updateAccountPlanBody,} from "../validators/accounts.js";
 
 export const accountRoutes = (deps: { db: Db; config: Config }): FastifyPluginAsync => async (app) => {
   const { db, config } = deps;
@@ -20,4 +20,21 @@ export const accountRoutes = (deps: { db: Db; config: Config }): FastifyPluginAs
   app.get("/account", { preHandler: requireApiKey(db) }, async (req) => {
     return { account: await getAccount(db, req.accountId) };
   });
+
+  
+  app.put("/account/plan",{ preHandler: requireApiKey(db) },async (req) => {
+      const body = updateAccountPlanBody.parse(req.body);
+
+      const account = await changeAccountPlan(
+        db,
+        req.accountId,
+        body.planId,
+      );
+
+      return { account };
+    },
+  );
+
 };
+
+

@@ -17,3 +17,21 @@ export async function findAccountWithPlan(ex: Executor, id: string) {
     .limit(1);
   return row ?? null;
 }
+
+
+export async function updateAccountPlan(
+  ex: Executor,
+  accountId: string,
+  planId: string,
+) {
+  const [row] = await ex
+    .update(accounts)
+    .set({
+      planId,
+      planScope: "account",
+    })
+    .where(eq(accounts.id, accountId))
+    .returning();
+
+  return row ?? null;
+}
