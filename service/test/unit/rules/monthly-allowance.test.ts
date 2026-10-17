@@ -24,7 +24,11 @@ describe("monthlyAllowance (user limit 1000)", () => {
   });
 
   it("rejects everything once the allowance was reduced below usage", () => {
-    const c = ctx({ units: 1, usage: { user: 800 }, limits: { user: { monthlyLimit: 500, maxPerRequest: 20 } } });
+    const c = ctx({
+      units: 1,
+      usage: { user: 800 },
+      limits: { user: { monthlyLimit: 500, maxPerRequest: 20 } },
+    });
     expect(monthlyAllowance("user").check(c)).toEqual({ ok: false, limit: 500 });
   });
 

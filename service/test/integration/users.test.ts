@@ -38,7 +38,7 @@ async function newAccount(name = "users-test") {
 }
 
 function usersRequest(
-  method: "GET" | "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   url: string,
   key?: string,
   payload?: object,
@@ -51,11 +51,7 @@ function usersRequest(
   });
 }
 
-async function createUser(
-  key: string,
-  externalId = "employee-001",
-  planId?: string,
-) {
+async function createUser(key: string, externalId = "employee-001", planId?: string) {
   return usersRequest("POST", "/v1/users", key, {
     externalId,
     ...(planId ? { planId } : {}),
@@ -125,9 +121,7 @@ describe("POST /v1/users — creation", () => {
   it("rejects duplicate externalIds within the same account", async () => {
     const { apiKey } = await newAccount("duplicate-user");
 
-    expect((await createUser(apiKey.key, "employee-003")).statusCode).toBe(
-      201,
-    );
+    expect((await createUser(apiKey.key, "employee-003")).statusCode).toBe(201);
 
     const duplicate = await createUser(apiKey.key, "employee-003");
 
@@ -162,11 +156,7 @@ describe("POST /v1/users — creation", () => {
   it("rejects an unknown plan", async () => {
     const { apiKey } = await newAccount("unknown-plan-user");
 
-    const res = await createUser(
-      apiKey.key,
-      "employee-005",
-      "11111111-1111-4111-8111-111111111111",
-    );
+    const res = await createUser(apiKey.key, "employee-005", "11111111-1111-4111-8111-111111111111");
 
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe("plan_not_found");
@@ -176,11 +166,7 @@ describe("POST /v1/users — creation", () => {
     const { apiKey } = await newAccount("scope-mismatch-user");
     const starterId = await predefinedPlanId("Starter");
 
-    const res = await createUser(
-      apiKey.key,
-      "employee-006",
-      starterId,
-    );
+    const res = await createUser(apiKey.key, "employee-006", starterId);
 
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("plan_scope_mismatch");
@@ -218,11 +204,7 @@ describe("GET /v1/users/:id — retrieving a user", () => {
     const created = await createUser(apiKey.key, "employee-007");
     const userId = created.json().user.id;
 
-    const res = await usersRequest(
-      "GET",
-      `/v1/users/${userId}`,
-      apiKey.key,
-    );
+    const res = await usersRequest("GET", `/v1/users/${userId}`, apiKey.key);
 
     expect(res.statusCode).toBe(200);
     expect(res.json().user).toMatchObject({
@@ -239,11 +221,7 @@ describe("GET /v1/users/:id — retrieving a user", () => {
     const created = await createUser(b.apiKey.key, "private-employee");
     const userId = created.json().user.id;
 
-    const res = await usersRequest(
-      "GET",
-      `/v1/users/${userId}`,
-      a.apiKey.key,
-    );
+    const res = await usersRequest("GET", `/v1/users/${userId}`, a.apiKey.key);
 
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe("user_not_found");
@@ -252,30 +230,21 @@ describe("GET /v1/users/:id — retrieving a user", () => {
   it("returns 400 for a malformed user ID", async () => {
     const { apiKey } = await newAccount("malformed-user-id");
 
-    const res = await usersRequest(
-      "GET",
-      "/v1/users/not-a-uuid",
-      apiKey.key,
-    );
+    const res = await usersRequest("GET", "/v1/users/not-a-uuid", apiKey.key);
 
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("validation_error");
   });
 });
 
-describe("PATCH /v1/users/:id/plan — changing plans", () => {
+describe("PUT /v1/users/:id/plan — changing plans", () => {
   it("changes a user's plan to Premium", async () => {
     const { apiKey } = await newAccount("change-plan");
     const created = await createUser(apiKey.key, "employee-008");
     const userId = created.json().user.id;
     const premiumId = await predefinedPlanId("Premium");
 
-    const res = await usersRequest(
-      "PATCH",
-      `/v1/users/${userId}/plan`,
-      apiKey.key,
-      { planId: premiumId },
-    );
+    const res = await usersRequest("PUT", `/v1/users/${userId}/plan`, apiKey.key, { planId: premiumId });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().user.plan).toMatchObject({
@@ -292,12 +261,9 @@ describe("PATCH /v1/users/:id/plan — changing plans", () => {
     const created = await createUser(apiKey.key, "employee-009");
     const starterId = await predefinedPlanId("Starter");
 
-    const res = await usersRequest(
-      "PATCH",
-      `/v1/users/${created.json().user.id}/plan`,
-      apiKey.key,
-      { planId: starterId },
-    );
+    const res = await usersRequest("PUT", `/v1/users/${created.json().user.id}/plan`, apiKey.key, {
+      planId: starterId,
+    });
 
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("plan_scope_mismatch");
@@ -310,12 +276,9 @@ describe("PATCH /v1/users/:id/plan — changing plans", () => {
     const created = await createUser(b.apiKey.key, "private-employee");
     const premiumId = await predefinedPlanId("Premium");
 
-    const res = await usersRequest(
-      "PATCH",
-      `/v1/users/${created.json().user.id}/plan`,
-      a.apiKey.key,
-      { planId: premiumId },
-    );
+    const res = await usersRequest("PUT", `/v1/users/${created.json().user.id}/plan`, a.apiKey.key, {
+      planId: premiumId,
+    });
 
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe("user_not_found");
@@ -325,12 +288,7 @@ describe("PATCH /v1/users/:id/plan — changing plans", () => {
     const { apiKey } = await newAccount("missing-plan-id");
     const created = await createUser(apiKey.key, "employee-010");
 
-    const res = await usersRequest(
-      "PATCH",
-      `/v1/users/${created.json().user.id}/plan`,
-      apiKey.key,
-      {},
-    );
+    const res = await usersRequest("PUT", `/v1/users/${created.json().user.id}/plan`, apiKey.key, {});
 
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("validation_error");
@@ -343,11 +301,7 @@ describe("DELETE /v1/users/:id — soft deletion", () => {
     const created = await createUser(apiKey.key, "employee-011");
     const userId = created.json().user.id;
 
-    const res = await usersRequest(
-      "DELETE",
-      `/v1/users/${userId}`,
-      apiKey.key,
-    );
+    const res = await usersRequest("DELETE", `/v1/users/${userId}`, apiKey.key);
 
     expect(res.statusCode).toBe(204);
 
@@ -359,11 +313,7 @@ describe("DELETE /v1/users/:id — soft deletion", () => {
     expect(stored.rows).toHaveLength(1);
     expect(stored.rows[0]!.deleted_at).not.toBeNull();
 
-    const getRes = await usersRequest(
-      "GET",
-      `/v1/users/${userId}`,
-      apiKey.key,
-    );
+    const getRes = await usersRequest("GET", `/v1/users/${userId}`, apiKey.key);
 
     expect(getRes.statusCode).toBe(404);
 
@@ -379,11 +329,7 @@ describe("DELETE /v1/users/:id — soft deletion", () => {
 
     const created = await createUser(b.apiKey.key, "private-employee");
 
-    const res = await usersRequest(
-      "DELETE",
-      `/v1/users/${created.json().user.id}`,
-      a.apiKey.key,
-    );
+    const res = await usersRequest("DELETE", `/v1/users/${created.json().user.id}`, a.apiKey.key);
 
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe("user_not_found");

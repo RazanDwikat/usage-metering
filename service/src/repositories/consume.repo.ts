@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, lt } from "drizzle-orm";
+import { and, count, desc, eq, gte, lt } from "drizzle-orm";
 import type { Executor } from "../config/database.js";
 import { consumeRequests, users } from "../db/schema.js";
 
@@ -12,12 +12,7 @@ export async function findConsumeRequest(
   const [row] = await ex
     .select()
     .from(consumeRequests)
-    .where(
-      and(
-        eq(consumeRequests.accountId, accountId),
-        eq(consumeRequests.requestId, requestId),
-      ),
-    )
+    .where(and(eq(consumeRequests.accountId, accountId), eq(consumeRequests.requestId, requestId)))
     .limit(1);
 
   return row ?? null;
@@ -27,10 +22,7 @@ export async function insertConsumeRequest(
   ex: Executor,
   input: typeof consumeRequests.$inferInsert,
 ): Promise<ConsumeRequestRow> {
-  const [row] = await ex
-    .insert(consumeRequests)
-    .values(input)
-    .returning();
+  const [row] = await ex.insert(consumeRequests).values(input).returning();
 
   if (!row) {
     throw new Error("Failed to record consume request");
@@ -38,7 +30,6 @@ export async function insertConsumeRequest(
 
   return row;
 }
-
 
 interface ConsumeHistoryFilters {
   accountId: string;
@@ -48,13 +39,23 @@ interface ConsumeHistoryFilters {
   offset: number;
 }
 
-export async function listConsumeHistory(
-  ex: Executor,
-  filters: ConsumeHistoryFilters,
-) {
-  
+function historyWhere(f: Pick<ConsumeHistoryFilters, "accountId" | "windowStart" | "externalId">) {
+  return and(
+    eq(consumeRequests.accountId, f.accountId),
+    gte(consumeRequests.windowStart, f.windowStart),
+    lt(consumeRequests.windowStart, nextMonthStart(f.windowStart)),
+    ...(f.externalId !== undefined ? [eq(users.externalId, f.externalId)] : []),
+  );
+}
 
-  const query = ex
+const joinUsers = and(
+  // (account_id, id) pair: a request can only ever join a user of its own account.
+  eq(users.id, consumeRequests.userId),
+  eq(users.accountId, consumeRequests.accountId),
+);
+
+export async function listConsumeHistory(ex: Executor, filters: ConsumeHistoryFilters) {
+  return ex
     .select({
       requestId: consumeRequests.requestId,
       externalId: users.externalId,
@@ -72,31 +73,23 @@ export async function listConsumeHistory(
       createdAt: consumeRequests.createdAt,
     })
     .from(consumeRequests)
-    .innerJoin(
-      users,
-      and(
-        eq(users.id, consumeRequests.userId),
-        eq(users.accountId, consumeRequests.accountId),
-      ),
-    )
-    .where(
-      and(
-        eq(consumeRequests.accountId, filters.accountId),
-        gte(consumeRequests.windowStart, filters.windowStart),
-        lt(
-          consumeRequests.windowStart,
-          nextMonthStart(filters.windowStart),
-        ),
-        ...(filters.externalId !== undefined
-          ? [eq(users.externalId, filters.externalId)]
-          : []),
-      ),
-    )
+    .innerJoin(users, joinUsers)
+    .where(historyWhere(filters))
     .orderBy(desc(consumeRequests.createdAt), desc(consumeRequests.id))
     .limit(filters.limit)
     .offset(filters.offset);
+}
 
-  return query;
+export async function countConsumeHistory(
+  ex: Executor,
+  filters: Pick<ConsumeHistoryFilters, "accountId" | "windowStart" | "externalId">,
+): Promise<number> {
+  const [row] = await ex
+    .select({ n: count() })
+    .from(consumeRequests)
+    .innerJoin(users, joinUsers)
+    .where(historyWhere(filters));
+  return row?.n ?? 0;
 }
 
 function nextMonthStart(windowStart: string): string {

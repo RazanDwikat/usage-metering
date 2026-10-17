@@ -1,13 +1,10 @@
-﻿
-import type { Db, Executor } from "../config/database.js";
-import {
-  BadRequestError,
-  ConflictError,
-  NotFoundError,
-} from "../errors/app-error.js";
+﻿import type { Db, Executor } from "../config/database.js";
+import { isUniqueViolation } from "../lib/db-errors.js";
+import { toPlanView, type PlanView } from "../views/plan.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../errors/app-error.js";
 import {
   findPlanById,
-  findPlanByIdForUpdate,
+  findPlanByIdForShare,
   findPredefinedPlan,
   type PlanRow,
 } from "../repositories/plans.repo.js";
@@ -15,7 +12,8 @@ import {
   findUserByExternalId,
   findUserById,
   insertUser,
-  listUsers,
+  countActiveUsers,
+  listUsersWithPlans,
   softDeleteUser,
   updateUserPlan,
   type UserRow,
@@ -27,14 +25,7 @@ export interface UserView {
   id: string;
   externalId: string;
   createdAt: string;
-  plan: {
-    id: string;
-    name: string;
-    scope: "account" | "user";
-    monthlyLimit: number;
-    maxPerRequest: number;
-    predefined: boolean;
-  };
+  plan: PlanView;
 }
 
 function toUserView(user: UserRow, plan: PlanRow): UserView {
@@ -42,32 +33,11 @@ function toUserView(user: UserRow, plan: PlanRow): UserView {
     id: user.id,
     externalId: user.externalId,
     createdAt: user.createdAt.toISOString(),
-    plan: {
-      id: plan.id,
-      name: plan.name,
-      scope: plan.scope,
-      monthlyLimit: plan.monthlyLimit,
-      maxPerRequest: plan.maxPerRequest,
-      predefined: plan.ownerAccountId === null,
-    },
+    plan: toPlanView(plan),
   };
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "23505"
-  );
-}
-
-
-async function getUsableUserPlan(
-  ex: Executor,
-  accountId: string,
-  planId?: string,
-): Promise<PlanRow> {
+async function getUsableUserPlan(ex: Executor, accountId: string, planId?: string): Promise<PlanRow> {
   const selectedPlan = planId
     ? await findPlanById(ex, planId)
     : await findPredefinedPlan(ex, "user", DEFAULT_USER_PLAN);
@@ -76,30 +46,23 @@ async function getUsableUserPlan(
     throw new NotFoundError("plan_not_found", "Plan not found");
   }
 
-  // Lock the plan row, then validate its current state.
-  const plan = await findPlanByIdForUpdate(ex, selectedPlan.id);
+  // Shared lock: a concurrent archive must wait for this assignment, then sees the plan in use.
+  const plan = await findPlanByIdForShare(ex, selectedPlan.id);
 
   if (!plan || plan.archivedAt !== null) {
     throw new NotFoundError("plan_not_found", "Plan not found");
   }
 
   if (plan.scope !== "user") {
-    throw new BadRequestError(
-      "plan_scope_mismatch",
-      "Users need a user plan",
-    );
+    throw new BadRequestError("plan_scope_mismatch", "Users need a user plan");
   }
 
-  if (
-    plan.ownerAccountId !== null &&
-    plan.ownerAccountId !== accountId
-  ) {
+  if (plan.ownerAccountId !== null && plan.ownerAccountId !== accountId) {
     throw new NotFoundError("plan_not_found", "Plan not found");
   }
 
   return plan;
 }
-
 
 export async function createUser(
   db: Db,
@@ -108,24 +71,13 @@ export async function createUser(
 ): Promise<UserView> {
   try {
     return await db.transaction(async (tx) => {
-      const existing = await findUserByExternalId(
-        tx,
-        accountId,
-        input.externalId,
-      );
+      const existing = await findUserByExternalId(tx, accountId, input.externalId);
 
       if (existing) {
-        throw new ConflictError(
-          "user_already_exists",
-          "A user with this externalId already exists",
-        );
+        throw new ConflictError("user_already_exists", "A user with this externalId already exists");
       }
 
-      const plan = await getUsableUserPlan(
-        tx,
-        accountId,
-        input.planId,
-      );
+      const plan = await getUsableUserPlan(tx, accountId, input.planId);
 
       const user = await insertUser(tx, {
         accountId,
@@ -137,21 +89,14 @@ export async function createUser(
     });
   } catch (error) {
     if (isUniqueViolation(error)) {
-      throw new ConflictError(
-        "user_already_exists",
-        "A user with this externalId already exists",
-      );
+      throw new ConflictError("user_already_exists", "A user with this externalId already exists");
     }
 
     throw error;
   }
 }
 
-export async function getUser(
-  db: Db,
-  accountId: string,
-  userId: string,
-): Promise<UserView> {
+export async function getUser(db: Db, accountId: string, userId: string): Promise<UserView> {
   const user = await findUserById(db, accountId, userId);
 
   if (!user) {
@@ -167,23 +112,15 @@ export async function getUser(
   return toUserView(user, plan);
 }
 
-export async function getUsers(
-  db: Db,
-  accountId: string,
-): Promise<UserView[]> {
-  const rows = await listUsers(db, accountId);
-
-  return Promise.all(
-    rows.map(async (user) => {
-      const plan = await findPlanById(db, user.planId);
-
-      if (!plan) {
-        throw new Error("User plan is missing from the database");
-      }
-
-      return toUserView(user, plan);
-    }),
-  );
+export async function getUsers(db: Db, accountId: string, page: { limit: number; offset: number }) {
+  const [rows, total] = await Promise.all([
+    listUsersWithPlans(db, accountId, page),
+    countActiveUsers(db, accountId),
+  ]);
+  return {
+    users: rows.map((r) => toUserView(r.user, r.plan)),
+    pagination: { limit: page.limit, offset: page.offset, total },
+  };
 }
 
 export async function changeUserPlan(
@@ -199,18 +136,9 @@ export async function changeUserPlan(
       throw new NotFoundError("user_not_found", "User not found");
     }
 
-    const plan = await getUsableUserPlan(
-      tx,
-      accountId,
-      planId,
-    );
+    const plan = await getUsableUserPlan(tx, accountId, planId);
 
-    const updated = await updateUserPlan(
-      tx,
-      accountId,
-      userId,
-      plan.id,
-    );
+    const updated = await updateUserPlan(tx, accountId, userId, plan.id);
 
     if (!updated) {
       throw new NotFoundError("user_not_found", "User not found");
@@ -220,11 +148,7 @@ export async function changeUserPlan(
   });
 }
 
-export async function deleteUser(
-  db: Db,
-  accountId: string,
-  userId: string,
-): Promise<void> {
+export async function deleteUser(db: Db, accountId: string, userId: string): Promise<void> {
   const deleted = await softDeleteUser(db, accountId, userId);
 
   if (!deleted) {

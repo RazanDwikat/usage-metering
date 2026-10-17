@@ -48,10 +48,7 @@ async function createUser(key: string, externalId = "employee-001") {
   };
 }
 
-function consumeRequest(
-  key: string | undefined,
-  payload: object,
-) {
+function consumeRequest(key: string | undefined, payload: object) {
   return h.app.inject({
     method: "POST",
     url: "/v1/consume",
@@ -60,10 +57,7 @@ function consumeRequest(
   });
 }
 
-async function getCounters(
-  accountId: string,
-  windowStart: string,
-) {
+async function getCounters(accountId: string, windowStart: string) {
   const result = await sql<{
     user_id: string | null;
     used: number;
@@ -127,12 +121,8 @@ describe("POST /v1/consume — usage metering", () => {
     const counters = await getCounters(account.id, result.windowStart);
 
     expect(counters).toHaveLength(2);
-    expect(
-      counters.find((counter) => counter.user_id === null)?.used,
-    ).toBe(5);
-    expect(
-      counters.find((counter) => counter.user_id === user.id)?.used,
-    ).toBe(5);
+    expect(counters.find((counter) => counter.user_id === null)?.used).toBe(5);
+    expect(counters.find((counter) => counter.user_id === user.id)?.used).toBe(5);
   });
 
   it("rejects a request over the Basic per-request limit without consuming units", async () => {
@@ -177,12 +167,11 @@ describe("POST /v1/consume — usage metering", () => {
 
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
-    expect(second.json()).toEqual(first.json());
+    expect(first.json().replayed).toBe(false);
+    expect(second.json().replayed).toBe(true);
+    expect({ ...second.json(), replayed: false }).toEqual(first.json());
 
-    const counters = await getCounters(
-      account.id,
-      first.json().windowStart,
-    );
+    const counters = await getCounters(account.id, first.json().windowStart);
 
     expect(counters).toHaveLength(2);
     expect(counters.every((counter) => counter.used === 5)).toBe(true);
@@ -210,7 +199,6 @@ describe("POST /v1/consume — usage metering", () => {
     expect(second.json().error.code).toBe("idempotency_key_reused");
   });
 
-  
   it("does not allow concurrent requests to exceed the shared account allowance", async () => {
     const { account, apiKey } = await newAccount("consume-concurrency");
 
@@ -218,76 +206,71 @@ describe("POST /v1/consume — usage metering", () => {
     const userB = await createUser(apiKey.key, "concurrent-employee-b");
 
     const planResult = await sql<{
-       monthly_limit: number;
-       max_per_request: number;
-    }>(`SELECT p.monthly_limit, p.max_per_request
+      monthly_limit: number;
+      max_per_request: number;
+    }>(
+      `SELECT p.monthly_limit, p.max_per_request
         FROM accounts a
         JOIN plans p ON p.id = a.plan_id
         WHERE a.id = $1`,
-        [account.id],
+      [account.id],
     );
 
-   expect(planResult.rows).toHaveLength(1);
+    expect(planResult.rows).toHaveLength(1);
 
-   const accountPlan = planResult.rows[0]!;
-   expect(accountPlan.monthly_limit).toBeGreaterThan(0);
-   expect(accountPlan.max_per_request).toBeGreaterThanOrEqual(1);
+    const accountPlan = planResult.rows[0]!;
+    expect(accountPlan.monthly_limit).toBeGreaterThan(0);
+    expect(accountPlan.max_per_request).toBeGreaterThanOrEqual(1);
 
-   const now = new Date();
-   const windowStart =
-    `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+    const now = new Date();
+    const windowStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
 
-  // Leave room for exactly one more unit in the shared account allowance.
-   await sql(
-    `INSERT INTO usage_counters
+    // Leave room for exactly one more unit in the shared account allowance.
+    await sql(
+      `INSERT INTO usage_counters
        (account_id, user_id, window_type, window_start, used)
      VALUES ($1, NULL, 'month', $2, $3)
      ON CONFLICT (account_id, user_id, window_type, window_start)
      DO UPDATE SET used = EXCLUDED.used, updated_at = now()`,
-    [account.id, windowStart, accountPlan.monthly_limit - 1],
-   );
+      [account.id, windowStart, accountPlan.monthly_limit - 1],
+    );
 
-   const [resA, resB] = await Promise.all([
-    consumeRequest(apiKey.key, {
-      requestId: "concurrent-request-a",
-      externalId: userA.externalId,
-      units: 1,
-    }),
-     consumeRequest(apiKey.key, {
-      requestId: "concurrent-request-b",
-      externalId: userB.externalId,
-      units: 1,
-    }),
-  ]);
+    const [resA, resB] = await Promise.all([
+      consumeRequest(apiKey.key, {
+        requestId: "concurrent-request-a",
+        externalId: userA.externalId,
+        units: 1,
+      }),
+      consumeRequest(apiKey.key, {
+        requestId: "concurrent-request-b",
+        externalId: userB.externalId,
+        units: 1,
+      }),
+    ]);
 
-   expect(resA.statusCode).toBe(200);
-   expect(resB.statusCode).toBe(200);
+    expect(resA.statusCode).toBe(200);
+    expect(resB.statusCode).toBe(200);
 
-   const results = [resA.json(), resB.json()];
+    const results = [resA.json(), resB.json()];
 
-   expect(results.filter((result) => result.accepted)).toHaveLength(1);
-   expect(results.filter((result) => !result.accepted)).toHaveLength(1);
+    expect(results.filter((result) => result.accepted)).toHaveLength(1);
+    expect(results.filter((result) => !result.accepted)).toHaveLength(1);
 
-   const rejected = results.find((result) => !result.accepted)!;
+    const rejected = results.find((result) => !result.accepted)!;
 
-   expect(rejected.rejection).toMatchObject({
-    scope: "account",
-    rule: "monthly_allowance",
+    expect(rejected.rejection).toMatchObject({
+      scope: "account",
+      rule: "monthly_allowance",
+    });
+
+    const counters = await getCounters(account.id, windowStart);
+    const accountCounter = counters.find((counter) => counter.user_id === null);
+
+    expect(accountCounter?.used).toBe(accountPlan.monthly_limit);
+
+    const userCounterA = counters.find((counter) => counter.user_id === userA.id);
+    const userCounterB = counters.find((counter) => counter.user_id === userB.id);
+
+    expect([userCounterA?.used, userCounterB?.used].sort()).toEqual([0, 1]);
   });
-
-   const counters = await getCounters(account.id, windowStart);
-   const accountCounter = counters.find((counter) => counter.user_id === null);
-
-   expect(accountCounter?.used).toBe(accountPlan.monthly_limit);
-
-   const userCounterA = counters.find(
-    (counter) => counter.user_id === userA.id,
-  );
-   const userCounterB = counters.find(
-    (counter) => counter.user_id === userB.id,
-  );
-
-   expect([userCounterA?.used, userCounterB?.used].sort()).toEqual([0, 1]);
-});
-
 });

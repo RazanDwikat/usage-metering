@@ -1,4 +1,3 @@
-
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp, type TestApp } from "../helpers/app.js";
 
@@ -97,11 +96,7 @@ describe("GET /v1/plans", () => {
     };
 
     expect(body.plans.some((p) => p.name === "Starter")).toBe(true);
-    expect(
-      body.plans.some(
-        (p) => p.name === "My user plan" && !p.predefined,
-      ),
-    ).toBe(true);
+    expect(body.plans.some((p) => p.name === "My user plan" && !p.predefined)).toBe(true);
   });
 
   it("does not expose another account's custom plans", async () => {
@@ -114,11 +109,7 @@ describe("GET /v1/plans", () => {
 
     expect(created.statusCode).toBe(201);
 
-    const res = await plansRequest(
-      "GET",
-      "/v1/plans",
-      second.apiKey.key,
-    );
+    const res = await plansRequest("GET", "/v1/plans", second.apiKey.key);
 
     expect(res.statusCode).toBe(200);
 
@@ -209,11 +200,7 @@ describe("GET /v1/plans/:id", () => {
     });
 
     const id = created.json().plan.id as string;
-    const res = await plansRequest(
-      "GET",
-      `/v1/plans/${id}`,
-      apiKey.key,
-    );
+    const res = await plansRequest("GET", `/v1/plans/${id}`, apiKey.key);
 
     expect(res.statusCode).toBe(200);
     expect(res.json().plan.name).toBe("Readable plan");
@@ -228,11 +215,7 @@ describe("GET /v1/plans/:id", () => {
     });
 
     const id = created.json().plan.id as string;
-    const res = await plansRequest(
-      "GET",
-      `/v1/plans/${id}`,
-      other.apiKey.key,
-    );
+    const res = await plansRequest("GET", `/v1/plans/${id}`, other.apiKey.key);
 
     expect(res.statusCode).toBe(404);
   });
@@ -240,11 +223,7 @@ describe("GET /v1/plans/:id", () => {
   it("rejects a malformed plan ID", async () => {
     const { apiKey } = await newAccount("plans-bad-id");
 
-    const res = await plansRequest(
-      "GET",
-      "/v1/plans/not-a-uuid",
-      apiKey.key,
-    );
+    const res = await plansRequest("GET", "/v1/plans/not-a-uuid", apiKey.key);
 
     expect(res.statusCode).toBe(400);
   });
@@ -261,15 +240,10 @@ describe("PATCH /v1/plans/:id", () => {
 
     const id = created.json().plan.id as string;
 
-    const res = await plansRequest(
-      "PATCH",
-      `/v1/plans/${id}`,
-      apiKey.key,
-      {
-        name: "After update",
-        monthlyLimit: 2000,
-      },
-    );
+    const res = await plansRequest("PATCH", `/v1/plans/${id}`, apiKey.key, {
+      name: "After update",
+      monthlyLimit: 2000,
+    });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().plan).toMatchObject({
@@ -291,82 +265,72 @@ describe("PATCH /v1/plans/:id", () => {
 
     // Only the monthly limit changes. The service must compare it
     // against the existing maxPerRequest value as well.
-    const res = await plansRequest(
-      "PATCH",
-      `/v1/plans/${id}`,
-      apiKey.key,
-      { monthlyLimit: 100 },
-    );
+    const res = await plansRequest("PATCH", `/v1/plans/${id}`, apiKey.key, { monthlyLimit: 100 });
 
     expect(res.statusCode).toBe(400);
   });
 
   it("applies updated plan limits to subsequent consume requests", async () => {
-  const { apiKey } = await newAccount("plans-live-update");
+    const { apiKey } = await newAccount("plans-live-update");
 
-  const createdPlan = await createPlan(apiKey.key, {
-    name: "Live update plan",
-    scope: "user",
-    monthlyLimit: 1000,
-    maxPerRequest: 100,
-  });
+    const createdPlan = await createPlan(apiKey.key, {
+      name: "Live update plan",
+      scope: "user",
+      monthlyLimit: 1000,
+      maxPerRequest: 100,
+    });
 
-  expect(createdPlan.statusCode).toBe(201);
+    expect(createdPlan.statusCode).toBe(201);
 
-  const planId = createdPlan.json().plan.id as string;
+    const planId = createdPlan.json().plan.id as string;
 
-  const userRes = await h.app.inject({
-    method: "POST",
-    url: "/v1/users",
-    headers: { "x-api-key": apiKey.key },
-    payload: {
-      externalId: "live-update-employee",
-      planId,
-    },
-  });
+    const userRes = await h.app.inject({
+      method: "POST",
+      url: "/v1/users",
+      headers: { "x-api-key": apiKey.key },
+      payload: {
+        externalId: "live-update-employee",
+        planId,
+      },
+    });
 
-  expect(userRes.statusCode).toBe(201);
+    expect(userRes.statusCode).toBe(201);
 
-  const firstConsume = await h.app.inject({
-    method: "POST",
-    url: "/v1/consume",
-    headers: { "x-api-key": apiKey.key },
-    payload: {
-      requestId: "live-update-before",
-      externalId: "live-update-employee",
-      units: 50,
-    },
-  });
+    const firstConsume = await h.app.inject({
+      method: "POST",
+      url: "/v1/consume",
+      headers: { "x-api-key": apiKey.key },
+      payload: {
+        requestId: "live-update-before",
+        externalId: "live-update-employee",
+        units: 50,
+      },
+    });
 
-  expect(firstConsume.statusCode).toBe(200);
-  expect(firstConsume.json().accepted).toBe(true);
+    expect(firstConsume.statusCode).toBe(200);
+    expect(firstConsume.json().accepted).toBe(true);
 
-  const updateRes = await plansRequest(
-    "PATCH",
-    `/v1/plans/${planId}`,
-    apiKey.key,
-    {
+    const updateRes = await plansRequest("PATCH", `/v1/plans/${planId}`, apiKey.key, {
       monthlyLimit: 40,
       maxPerRequest: 40,
-    },
-  );
+    });
 
-  expect(updateRes.statusCode).toBe(200);
+    expect(updateRes.statusCode).toBe(200);
 
-  const secondConsume = await h.app.inject({
-    method: "POST",
-    url: "/v1/consume",
-    headers: { "x-api-key": apiKey.key },
-    payload: {
-      requestId: "live-update-after",
-      externalId: "live-update-employee",
-      units: 1,
-    },
-  });
+    const secondConsume = await h.app.inject({
+      method: "POST",
+      url: "/v1/consume",
+      headers: { "x-api-key": apiKey.key },
+      payload: {
+        requestId: "live-update-after",
+        externalId: "live-update-employee",
+        units: 1,
+      },
+    });
 
-  expect(secondConsume.statusCode).toBe(200);
-  expect(secondConsume.json().accepted).toBe(false);
-  expect(secondConsume.json().rejection).toMatchObject({scope: "user",rule: "monthly_allowance",});
+    expect(secondConsume.statusCode).toBe(200);
+    expect(secondConsume.json().accepted).toBe(false);
+    expect(secondConsume.json().rejection).toMatchObject({ scope: "user", rule: "monthly_allowance" });
   });
 
   it("rejects an empty update", async () => {
@@ -374,12 +338,7 @@ describe("PATCH /v1/plans/:id", () => {
     const created = await createPlan(apiKey.key);
     const id = created.json().plan.id as string;
 
-    const res = await plansRequest(
-      "PATCH",
-      `/v1/plans/${id}`,
-      apiKey.key,
-      {},
-    );
+    const res = await plansRequest("PATCH", `/v1/plans/${id}`, apiKey.key, {});
 
     expect(res.statusCode).toBe(400);
   });
@@ -390,20 +349,15 @@ describe("PATCH /v1/plans/:id", () => {
     const list = await plansRequest("GET", "/v1/plans", apiKey.key);
     const starter = list
       .json()
-      .plans.find((p: { name: string; scope: string }) =>
-        p.name === "Starter" && p.scope === "account",
-      );
+      .plans.find((p: { name: string; scope: string }) => p.name === "Starter" && p.scope === "account");
 
     expect(starter).toBeTruthy();
 
-    const res = await plansRequest(
-      "PATCH",
-      `/v1/plans/${starter.id}`,
-      apiKey.key,
-      { name: "Changed Starter" },
-    );
+    const res = await plansRequest("PATCH", `/v1/plans/${starter.id}`, apiKey.key, {
+      name: "Changed Starter",
+    });
 
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).toBe(403);
   });
 
   it("does not allow modifying another account's plan", async () => {
@@ -416,12 +370,7 @@ describe("PATCH /v1/plans/:id", () => {
 
     const id = created.json().plan.id as string;
 
-    const res = await plansRequest(
-      "PATCH",
-      `/v1/plans/${id}`,
-      other.apiKey.key,
-      { name: "Hijacked plan" },
-    );
+    const res = await plansRequest("PATCH", `/v1/plans/${id}`, other.apiKey.key, { name: "Hijacked plan" });
 
     expect(res.statusCode).toBe(404);
   });
@@ -436,19 +385,13 @@ describe("DELETE /v1/plans/:id", () => {
 
     const id = created.json().plan.id as string;
 
-    const res = await plansRequest(
-      "DELETE",
-      `/v1/plans/${id}`,
-      apiKey.key,
-    );
+    const res = await plansRequest("DELETE", `/v1/plans/${id}`, apiKey.key);
 
     expect(res.statusCode).toBe(204);
 
     const list = await plansRequest("GET", "/v1/plans", apiKey.key);
 
-    expect(
-      list.json().plans.some((p: { id: string }) => p.id === id),
-    ).toBe(false);
+    expect(list.json().plans.some((p: { id: string }) => p.id === id)).toBe(false);
   });
 
   it("does not archive a plan assigned to an active user", async () => {
@@ -475,17 +418,12 @@ describe("DELETE /v1/plans/:id", () => {
 
     expect(userRes.statusCode).toBe(201);
 
-    const res = await plansRequest(
-      "DELETE",
-      `/v1/plans/${planId}`,
-      apiKey.key,
-    );
+    const res = await plansRequest("DELETE", `/v1/plans/${planId}`, apiKey.key);
 
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe("plan_in_use");
   });
-  
-  
+
   it("prevents an active user from being assigned to an archived plan during concurrent requests", async () => {
     const { apiKey } = await newAccount("plans-concurrency");
 
@@ -510,11 +448,7 @@ describe("DELETE /v1/plans/:id", () => {
         },
       }),
 
-      plansRequest(
-        "DELETE",
-        `/v1/plans/${planId}`,
-        apiKey.key,
-      ),
+      plansRequest("DELETE", `/v1/plans/${planId}`, apiKey.key),
     ]);
 
     // Both operations must return an expected outcome.
@@ -522,11 +456,7 @@ describe("DELETE /v1/plans/:id", () => {
     expect([204, 409]).toContain(archiveRes.statusCode);
 
     // Read the final plan state after both transactions finish.
-    const finalPlanRes = await plansRequest(
-      "GET",
-      `/v1/plans/${planId}`,
-      apiKey.key,
-    );
+    const finalPlanRes = await plansRequest("GET", `/v1/plans/${planId}`, apiKey.key);
 
     expect(finalPlanRes.statusCode).toBe(200);
 
@@ -551,19 +481,13 @@ describe("DELETE /v1/plans/:id", () => {
     const list = await plansRequest("GET", "/v1/plans", apiKey.key);
     const starter = list
       .json()
-      .plans.find((p: { name: string; scope: string }) =>
-        p.name === "Starter" && p.scope === "account",
-      );
+      .plans.find((p: { name: string; scope: string }) => p.name === "Starter" && p.scope === "account");
 
     expect(starter).toBeTruthy();
 
-    const res = await plansRequest(
-      "DELETE",
-      `/v1/plans/${starter.id}`,
-      apiKey.key,
-    );
+    const res = await plansRequest("DELETE", `/v1/plans/${starter.id}`, apiKey.key);
 
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).toBe(403);
   });
 
   it("does not allow archiving another account's plan", async () => {
@@ -576,11 +500,7 @@ describe("DELETE /v1/plans/:id", () => {
 
     const id = created.json().plan.id as string;
 
-    const res = await plansRequest(
-      "DELETE",
-      `/v1/plans/${id}`,
-      other.apiKey.key,
-    );
+    const res = await plansRequest("DELETE", `/v1/plans/${id}`, other.apiKey.key);
 
     expect(res.statusCode).toBe(404);
   });

@@ -43,12 +43,7 @@ async function createUser(key: string, externalId: string) {
   };
 }
 
-async function consume(
-  key: string,
-  externalId: string,
-  requestId: string,
-  units: number,
-) {
+async function consume(key: string, externalId: string, requestId: string, units: number) {
   return h.app.inject({
     method: "POST",
     url: "/v1/consume",
@@ -87,22 +82,14 @@ describe("GET /v1/usage/history — request history", () => {
     const { apiKey } = await newAccount("history-accepted");
     const user = await createUser(apiKey.key, "history-employee");
 
-    const consumeRes = await consume(
-      apiKey.key,
-      user.externalId,
-      "history-accepted-request",
-      5,
-    );
+    const consumeRes = await consume(apiKey.key, user.externalId, "history-accepted-request", 5);
 
     expect(consumeRes.statusCode).toBe(200);
     expect(consumeRes.json().accepted).toBe(true);
 
     const period = consumeRes.json().windowStart.slice(0, 7);
 
-    const res = await historyRequest(
-      apiKey.key,
-      `?month=${period}`,
-    );
+    const res = await historyRequest(apiKey.key, `?month=${period}`);
 
     expect(res.statusCode).toBe(200);
 
@@ -133,29 +120,20 @@ describe("GET /v1/usage/history — request history", () => {
 
     // The default user plan has a maximum per-request limit.
     // A deliberately oversized request should be rejected.
-    const consumeRes = await consume(
-      apiKey.key,
-      user.externalId,
-      "history-rejected-request",
-      1_000_000,
-    );
+    const consumeRes = await consume(apiKey.key, user.externalId, "history-rejected-request", 1_000_000);
 
     expect(consumeRes.statusCode).toBe(200);
     expect(consumeRes.json().accepted).toBe(false);
 
     const period = consumeRes.json().windowStart.slice(0, 7);
 
-    const res = await historyRequest(
-      apiKey.key,
-      `?month=${period}`,
-    );
+    const res = await historyRequest(apiKey.key, `?month=${period}`);
 
     expect(res.statusCode).toBe(200);
 
-    const item = res.json().history.items.find(
-      (entry: { requestId: string }) =>
-        entry.requestId === "history-rejected-request",
-    );
+    const item = res
+      .json()
+      .history.items.find((entry: { requestId: string }) => entry.requestId === "history-rejected-request");
 
     expect(item).toBeDefined();
     expect(item.accepted).toBe(false);
@@ -168,12 +146,7 @@ describe("GET /v1/usage/history — request history", () => {
     const firstUser = await createUser(apiKey.key, "history-filter-first");
     const secondUser = await createUser(apiKey.key, "history-filter-second");
 
-    const firstConsume = await consume(
-      apiKey.key,
-      firstUser.externalId,
-      "history-filter-request-first",
-      2,
-    );
+    const firstConsume = await consume(apiKey.key, firstUser.externalId, "history-filter-request-first", 2);
 
     const secondConsume = await consume(
       apiKey.key,
@@ -206,12 +179,7 @@ describe("GET /v1/usage/history — request history", () => {
     const user = await createUser(apiKey.key, "history-pagination-employee");
 
     for (let i = 1; i <= 3; i++) {
-      const res = await consume(
-        apiKey.key,
-        user.externalId,
-        `history-pagination-${i}`,
-        i,
-      );
+      const res = await consume(apiKey.key, user.externalId, `history-pagination-${i}`, i);
 
       expect(res.statusCode).toBe(200);
       expect(res.json().accepted).toBe(true);
@@ -219,15 +187,9 @@ describe("GET /v1/usage/history — request history", () => {
 
     const period = new Date().toISOString().slice(0, 7);
 
-    const firstPage = await historyRequest(
-      apiKey.key,
-      `?month=${period}&limit=2&offset=0`,
-    );
+    const firstPage = await historyRequest(apiKey.key, `?month=${period}&limit=2&offset=0`);
 
-    const secondPage = await historyRequest(
-      apiKey.key,
-      `?month=${period}&limit=2&offset=2`,
-    );
+    const secondPage = await historyRequest(apiKey.key, `?month=${period}&limit=2&offset=2`);
 
     expect(firstPage.statusCode).toBe(200);
     expect(secondPage.statusCode).toBe(200);
@@ -252,10 +214,7 @@ describe("GET /v1/usage/history — request history", () => {
     const firstAccount = await newAccount("history-account-first");
     const secondAccount = await newAccount("history-account-second");
 
-    const firstUser = await createUser(
-      firstAccount.apiKey.key,
-      "history-isolation-employee",
-    );
+    const firstUser = await createUser(firstAccount.apiKey.key, "history-isolation-employee");
 
     const consumeRes = await consume(
       firstAccount.apiKey.key,
@@ -268,10 +227,7 @@ describe("GET /v1/usage/history — request history", () => {
 
     const period = consumeRes.json().windowStart.slice(0, 7);
 
-    const res = await historyRequest(
-      secondAccount.apiKey.key,
-      `?month=${period}`,
-    );
+    const res = await historyRequest(secondAccount.apiKey.key, `?month=${period}`);
 
     expect(res.statusCode).toBe(200);
     expect(res.json().history.items).toHaveLength(0);

@@ -23,9 +23,7 @@ export async function runMigrations(pool: Pool, dir = MIGRATIONS_DIR): Promise<s
         applied_at timestamptz NOT NULL DEFAULT now()
       )`);
     const done = new Set(
-      (await client.query<{ name: string }>("SELECT name FROM schema_migrations")).rows.map(
-        (r) => r.name,
-      ),
+      (await client.query<{ name: string }>("SELECT name FROM schema_migrations")).rows.map((r) => r.name),
     );
     const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
     for (const file of files) {

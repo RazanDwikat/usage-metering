@@ -1,8 +1,3 @@
-/**
- * Errors the CLIENT should see. Services throw these; the error handler
- * (middlewares/error-handler.ts) turns them into HTTP responses.
- * Anything that is NOT an AppError is a bug and becomes a generic 500.
- */
 export class AppError extends Error {
   constructor(
     readonly statusCode: number,
@@ -23,6 +18,11 @@ export class BadRequestError extends AppError {
 export class UnauthorizedError extends AppError {
   constructor(code = "unauthorized", message = "Missing or invalid credentials") {
     super(401, code, message);
+  }
+}
+export class ForbiddenError extends AppError {
+  constructor(code: string, message: string) {
+    super(403, code, message);
   }
 }
 export class NotFoundError extends AppError {

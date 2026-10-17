@@ -6,7 +6,10 @@ import { ctx } from "./fixtures.js";
 describe("evaluate — the examples from the brief", () => {
   it("25 units: rejected by the USER's per-request limit even though both monthly allowances have room", () => {
     expect(evaluate(ctx({ units: 25 }))).toEqual({
-      accepted: false, scope: "user", rule: "max_per_request", limit: 20,
+      accepted: false,
+      scope: "user",
+      rule: "max_per_request",
+      limit: 20,
     });
   });
 
@@ -16,7 +19,10 @@ describe("evaluate — the examples from the brief", () => {
 
   it("10 units: rejected by the ACCOUNT's monthly allowance when it has only 5 left, even if the user has plenty", () => {
     expect(evaluate(ctx({ units: 10, usage: { account: 9_995, user: 0 } }))).toEqual({
-      accepted: false, scope: "account", rule: "monthly_allowance", limit: 10_000,
+      accepted: false,
+      scope: "account",
+      rule: "monthly_allowance",
+      limit: 10_000,
     });
   });
 });
@@ -28,12 +34,18 @@ describe("evaluate — boundaries and plan changes", () => {
 
   it("rejects a request one unit above what is left", () => {
     expect(evaluate(ctx({ units: 11, usage: { user: 990 } }))).toMatchObject({
-      accepted: false, scope: "user", rule: "monthly_allowance",
+      accepted: false,
+      scope: "user",
+      rule: "monthly_allowance",
     });
   });
 
   it("allowance reduced below existing usage: rejects at that level", () => {
-    const c = ctx({ units: 1, usage: { user: 800 }, limits: { user: { monthlyLimit: 500, maxPerRequest: 20 } } });
+    const c = ctx({
+      units: 1,
+      usage: { user: 800 },
+      limits: { user: { monthlyLimit: 500, maxPerRequest: 20 } },
+    });
     expect(evaluate(c)).toEqual({ accepted: false, scope: "user", rule: "monthly_allowance", limit: 500 });
   });
 });
@@ -52,13 +64,15 @@ describe("evaluate — which reason is reported when several rules fail", () => 
   it("per-request before monthly (same scope)", () => {
     // 25 > user per-request 20, and user only has 10 left
     expect(evaluate(ctx({ units: 25, usage: { user: 990 } }))).toMatchObject({
-      scope: "user", rule: "max_per_request",
+      scope: "user",
+      rule: "max_per_request",
     });
   });
 
   it("user monthly before account monthly", () => {
     expect(evaluate(ctx({ units: 10, usage: { user: 995, account: 9_995 } }))).toMatchObject({
-      scope: "user", rule: "monthly_allowance",
+      scope: "user",
+      rule: "monthly_allowance",
     });
   });
 });
@@ -81,7 +95,11 @@ describe("evaluate — properties", () => {
   });
 
   it("a new rule only needs to be added to the list (extensibility)", () => {
-    const rejectAll: Rule = { scope: "user", name: "monthly_allowance", check: () => ({ ok: false, limit: 0 }) };
+    const rejectAll: Rule = {
+      scope: "user",
+      name: "monthly_allowance",
+      check: () => ({ ok: false, limit: 0 }),
+    };
     expect(evaluate(ctx({ units: 1 }), [...RULES, rejectAll])).toMatchObject({ accepted: false, limit: 0 });
   });
 });

@@ -22,9 +22,13 @@ const me = (key?: string) =>
 async function newAccount(name = "acme", planId?: string) {
   const res = await createAccount({ name, ...(planId ? { planId } : {}) });
   expect(res.statusCode).toBe(201);
-  return res.json() as { account: { id: string; name: string; plan: { id: string; name: string } }; apiKey: { key: string; prefix: string } };
+  return res.json() as {
+    account: { id: string; name: string; plan: { id: string; name: string } };
+    apiKey: { key: string; prefix: string };
+  };
 }
-const sql = <T extends Record<string, unknown> = Record<string, unknown>>(q: string, p: unknown[] = []) => h.t.pool.query<T>(q, p);
+const sql = <T extends Record<string, unknown> = Record<string, unknown>>(q: string, p: unknown[] = []) =>
+  h.t.pool.query<T>(q, p);
 
 describe("POST /v1/accounts — admin protection", () => {
   it("rejects a missing admin token", async () => {
@@ -56,20 +60,33 @@ describe("POST /v1/accounts — creation", () => {
     expect(res.headers["cache-control"]).toBe("no-store");
     const b = res.json();
     expect(b.account.name).toBe("Acme Inc"); // trimmed
-    expect(b.account.plan).toMatchObject({ name: "Starter", scope: "account", monthlyLimit: 10_000, maxPerRequest: 100, predefined: true });
+    expect(b.account.plan).toMatchObject({
+      name: "Starter",
+      scope: "account",
+      monthlyLimit: 10_000,
+      maxPerRequest: 100,
+      predefined: true,
+    });
     expect(isWellFormedApiKey(b.apiKey.key)).toBe(true);
     expect(b.apiKey.prefix).toBe(b.apiKey.key.slice(0, 8));
   });
 
   it("can choose another predefined account plan (Pro)", async () => {
-    const pro = (await sql<{ id: string }>("SELECT id FROM plans WHERE name='Pro' AND owner_account_id IS NULL")).rows[0]!.id;
+    const pro = (
+      await sql<{ id: string }>("SELECT id FROM plans WHERE name='Pro' AND owner_account_id IS NULL")
+    ).rows[0]!.id;
     const { account } = await newAccount("pro-co", pro);
     expect(account.plan.name).toBe("Pro");
   });
 
   it("stores only the HASH of the key, never the key itself", async () => {
     const { account, apiKey } = await newAccount("hash-check");
-    const rows = (await sql<{ key_hash: Buffer; prefix: string }>("SELECT key_hash, prefix FROM api_keys WHERE account_id=$1", [account.id])).rows;
+    const rows = (
+      await sql<{ key_hash: Buffer; prefix: string }>(
+        "SELECT key_hash, prefix FROM api_keys WHERE account_id=$1",
+        [account.id],
+      )
+    ).rows;
     expect(rows).toHaveLength(1);
     expect(rows[0]!.key_hash.equals(hashApiKey(apiKey.key))).toBe(true);
     const dump = JSON.stringify((await sql("SELECT * FROM api_keys WHERE account_id=$1", [account.id])).rows);
@@ -98,7 +115,12 @@ describe("POST /v1/accounts — validation and plan rules", () => {
   });
 
   it("400 on malformed JSON", async () => {
-    const res = await h.app.inject({ method: "POST", url: "/v1/accounts", headers: { ...h.admin, "content-type": "application/json" }, payload: "{bad" });
+    const res = await h.app.inject({
+      method: "POST",
+      url: "/v1/accounts",
+      headers: { ...h.admin, "content-type": "application/json" },
+      payload: "{bad",
+    });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("bad_request");
   });
@@ -110,7 +132,9 @@ describe("POST /v1/accounts — validation and plan rules", () => {
   });
 
   it("400 plan_scope_mismatch for a USER plan", async () => {
-    const basic = (await sql<{ id: string }>("SELECT id FROM plans WHERE name='Basic' AND owner_account_id IS NULL")).rows[0]!.id;
+    const basic = (
+      await sql<{ id: string }>("SELECT id FROM plans WHERE name='Basic' AND owner_account_id IS NULL")
+    ).rows[0]!.id;
     const res = await createAccount({ name: "x", planId: basic });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("plan_scope_mismatch");
@@ -118,17 +142,21 @@ describe("POST /v1/accounts — validation and plan rules", () => {
 
   it("another account's CUSTOM plan cannot be used (reported as not found)", async () => {
     const owner = await newAccount("plan-owner");
-    const custom = (await sql<{ id: string }>(
-      "INSERT INTO plans (scope, owner_account_id, name, monthly_limit, max_per_request) VALUES ('account',$1,'Secret',5,5) RETURNING id",
-      [owner.account.id],
-    )).rows[0]!.id;
+    const custom = (
+      await sql<{ id: string }>(
+        "INSERT INTO plans (scope, owner_account_id, name, monthly_limit, max_per_request) VALUES ('account',$1,'Secret',5,5) RETURNING id",
+        [owner.account.id],
+      )
+    ).rows[0]!.id;
     const res = await createAccount({ name: "thief", planId: custom });
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe("plan_not_found");
   });
 
   it("an archived plan cannot be chosen", async () => {
-    const pro = (await sql<{ id: string }>("SELECT id FROM plans WHERE name='Pro' AND owner_account_id IS NULL")).rows[0]!.id;
+    const pro = (
+      await sql<{ id: string }>("SELECT id FROM plans WHERE name='Pro' AND owner_account_id IS NULL")
+    ).rows[0]!.id;
     await sql("UPDATE plans SET archived_at=now() WHERE id=$1", [pro]);
     try {
       expect((await createAccount({ name: "x", planId: pro })).statusCode).toBe(404);
@@ -201,7 +229,6 @@ describe("error format", () => {
   });
 });
 
-
 describe("PUT /v1/account/plan", () => {
   const updatePlan = (key: string, payload: unknown) =>
     h.app.inject({
@@ -219,11 +246,7 @@ describe("PUT /v1/account/plan", () => {
     return result.rows[0]!.id;
   }
 
-  async function createCustomPlan(
-    accountId: string,
-    name: string,
-    scope: "account" | "user" = "account",
-  ) {
+  async function createCustomPlan(accountId: string, name: string, scope: "account" | "user" = "account") {
     const result = await sql<{ id: string }>(
       `INSERT INTO plans
         (scope, owner_account_id, name, monthly_limit, max_per_request)
@@ -285,11 +308,7 @@ describe("PUT /v1/account/plan", () => {
 
   it("rejects user-scoped plans", async () => {
     const { account, apiKey } = await newAccount("user-plan-rejected");
-    const userPlanId = await createCustomPlan(
-      account.id,
-      "Account change rejects user plan",
-      "user",
-    );
+    const userPlanId = await createCustomPlan(account.id, "Account change rejects user plan", "user");
 
     const res = await updatePlan(apiKey.key, {
       planId: userPlanId,
@@ -302,10 +321,7 @@ describe("PUT /v1/account/plan", () => {
   it("rejects another account's custom plan", async () => {
     const owner = await newAccount("custom-plan-owner");
     const caller = await newAccount("custom-plan-caller");
-    const planId = await createCustomPlan(
-      owner.account.id,
-      "Private account plan",
-    );
+    const planId = await createCustomPlan(owner.account.id, "Private account plan");
 
     const res = await updatePlan(caller.apiKey.key, { planId });
 
@@ -317,9 +333,7 @@ describe("PUT /v1/account/plan", () => {
     const { apiKey } = await newAccount("archived-plan-rejected");
     const proId = await predefinedPlan("Pro");
 
-    await sql("UPDATE plans SET archived_at=now() WHERE id=$1", [
-      proId,
-    ]);
+    await sql("UPDATE plans SET archived_at=now() WHERE id=$1", [proId]);
 
     try {
       const res = await updatePlan(apiKey.key, { planId: proId });
@@ -327,9 +341,7 @@ describe("PUT /v1/account/plan", () => {
       expect(res.statusCode).toBe(404);
       expect(res.json().error.code).toBe("plan_not_found");
     } finally {
-      await sql("UPDATE plans SET archived_at=NULL WHERE id=$1", [
-        proId,
-      ]);
+      await sql("UPDATE plans SET archived_at=NULL WHERE id=$1", [proId]);
     }
   });
 
@@ -344,10 +356,10 @@ describe("PUT /v1/account/plan", () => {
       payload: {
         externalId: "preserve-usage-user",
       },
-   });
+    });
 
-   expect(userRes.statusCode).toBe(201);
- 
+    expect(userRes.statusCode).toBe(201);
+
     const consume = await h.app.inject({
       method: "POST",
       url: "/v1/consume",
@@ -358,8 +370,7 @@ describe("PUT /v1/account/plan", () => {
         units: 5,
       },
     });
-    
-    
+
     expect(consume.statusCode).toBe(200);
     expect(consume.json().accepted).toBe(true);
 
@@ -387,4 +398,3 @@ describe("PUT /v1/account/plan", () => {
     expect(after.rows[0]?.used).toBe(5);
   });
 });
-

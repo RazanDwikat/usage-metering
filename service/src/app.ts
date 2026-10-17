@@ -11,9 +11,8 @@ import { usageHistoryRoutes } from "./routes/usage-history.js";
 export interface AppDeps {
   config: Config;
   pool: Pool;
-  db: Db; 
+  db: Db;
 }
-
 
 export function buildApp({ config, pool, db }: AppDeps): FastifyInstance {
   const app = Fastify({ logger: process.env.NODE_ENV !== "test" });
@@ -30,6 +29,6 @@ export function buildApp({ config, pool, db }: AppDeps): FastifyInstance {
   app.register(planRoutes({ db }), { prefix: "/v1/plans" });
   app.register(consumeRoutes({ db }), { prefix: "/v1/consume" });
   app.register(usageRoutes({ db }), { prefix: "/v1/usage" });
-  app.register(usageHistoryRoutes({ db }), {prefix: "/v1/usage/history"});
+  app.register(usageHistoryRoutes({ db }), { prefix: "/v1/usage/history" });
   return app;
 }

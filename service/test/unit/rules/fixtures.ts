@@ -7,7 +7,11 @@ export const LIMITS: Limits = {
 };
 export const FRESH: Usage = { account: 0, user: 0 };
 
-export const ctx = (over: { units: number; usage?: Partial<Usage>; limits?: Partial<Limits> }): RuleContext => ({
+export const ctx = (over: {
+  units: number;
+  usage?: Partial<Usage>;
+  limits?: Partial<Limits>;
+}): RuleContext => ({
   units: over.units,
   limits: { ...LIMITS, ...over.limits },
   usage: { ...FRESH, ...over.usage },

@@ -1,11 +1,12 @@
-
 import { z } from "zod";
+import { externalIdField, monthParam, pagination } from "./common.js";
 
 export const usageQuery = z.strictObject({
-  month: z.string().regex(
-    /^\d{4}-(0[1-9]|1[0-2])$/,
-    "month must use YYYY-MM format",
-  ).optional(),
+  month: monthParam.optional(),
+  externalId: externalIdField.optional(),
+});
 
-  externalId: z.string().trim().min(1).max(200).optional(),
+export const usageUsersQuery = z.strictObject({
+  month: monthParam.optional(),
+  ...pagination(50, 200),
 });

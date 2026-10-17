@@ -2,34 +2,18 @@ import type { Db } from "../config/database.js";
 import { BadRequestError, NotFoundError } from "../errors/app-error.js";
 import { generateApiKey } from "../lib/api-key.js";
 import { insertApiKey } from "../repositories/api-keys.repo.js";
-import { findPlanById, findPredefinedPlan, type PlanRow } from "../repositories/plans.repo.js";
-import {findAccountWithPlan,insertAccount,updateAccountPlan,} from "../repositories/accounts.repo.js";
+import { findAccountWithPlan, insertAccount, updateAccountPlan } from "../repositories/accounts.repo.js";
+import { findPlanByIdForShare, findPlanById, findPredefinedPlan } from "../repositories/plans.repo.js";
+import { toPlanView, type PlanView } from "../views/plan.js";
+
 export const DEFAULT_ACCOUNT_PLAN = "Starter";
 
-export interface PlanView {
-  id: string;
-  name: string;
-  scope: "account" | "user";
-  monthlyLimit: number;
-  maxPerRequest: number;
-  predefined: boolean;
-}
 export interface AccountView {
   id: string;
   name: string;
   createdAt: string;
   plan: PlanView;
 }
-
-export const toPlanView = (p: PlanRow): PlanView => ({
-  id: p.id,
-  name: p.name,
-  scope: p.scope,
-  monthlyLimit: p.monthlyLimit,
-  maxPerRequest: p.maxPerRequest,
-  predefined: p.ownerAccountId === null,
-});
-
 
 export async function createAccount(db: Db, input: { name: string; planId?: string }) {
   return db.transaction(async (tx) => {
@@ -40,7 +24,7 @@ export async function createAccount(db: Db, input: { name: string; planId?: stri
     if (!input.planId && !plan) {
       throw new Error(`Default plan "${DEFAULT_ACCOUNT_PLAN}" is missing: the seed did not run`);
     }
-   
+    // A brand-new account has no custom plans yet, so only predefined plans can be chosen here.
     if (!plan || plan.ownerAccountId !== null || plan.archivedAt !== null) {
       throw new NotFoundError("plan_not_found", "Plan not found");
     }
@@ -53,7 +37,12 @@ export async function createAccount(db: Db, input: { name: string; planId?: stri
     await insertApiKey(tx, { accountId: account.id, keyHash: hash, prefix });
 
     return {
-      account: { id: account.id, name: account.name, createdAt: account.createdAt.toISOString(), plan: toPlanView(plan) },
+      account: {
+        id: account.id,
+        name: account.name,
+        createdAt: account.createdAt.toISOString(),
+        plan: toPlanView(plan),
+      },
       apiKey: { key, prefix },
     };
   });
@@ -70,55 +59,25 @@ export async function getAccount(db: Db, accountId: string): Promise<AccountView
   };
 }
 
-
-export async function changeAccountPlan(
-  db: Db,
-  accountId: string,
-  planId: string,
-): Promise<AccountView> {
+export async function changeAccountPlan(db: Db, accountId: string, planId: string): Promise<AccountView> {
   return db.transaction(async (tx) => {
-    const account = await findAccountWithPlan(tx, accountId);
-
-    if (!account) {
-      throw new NotFoundError(
-        "account_not_found",
-        "Account not found",
-      );
-    }
-
-    const plan = await findPlanById(tx, planId);
+    // Shared lock: a concurrent archive (which needs an exclusive lock) must wait for this
+    // assignment to commit, and will then see the plan is in use.
+    const plan = await findPlanByIdForShare(tx, planId);
 
     if (
       !plan ||
       plan.archivedAt !== null ||
-      (plan.ownerAccountId !== null &&
-        plan.ownerAccountId !== accountId)
+      (plan.ownerAccountId !== null && plan.ownerAccountId !== accountId)
     ) {
-      throw new NotFoundError(
-        "plan_not_found",
-        "Plan not found",
-      );
+      throw new NotFoundError("plan_not_found", "Plan not found");
     }
-
     if (plan.scope !== "account") {
-      throw new BadRequestError(
-        "plan_scope_mismatch",
-        "This is a user plan; accounts need an account plan",
-      );
+      throw new BadRequestError("plan_scope_mismatch", "This is a user plan; accounts need an account plan");
     }
 
-    const updated = await updateAccountPlan(
-      tx,
-      accountId,
-      plan.id,
-    );
-
-    if (!updated) {
-      throw new NotFoundError(
-        "account_not_found",
-        "Account not found",
-      );
-    }
+    const updated = await updateAccountPlan(tx, accountId, plan.id);
+    if (!updated) throw new NotFoundError("account_not_found", "Account not found");
 
     return {
       id: updated.id,

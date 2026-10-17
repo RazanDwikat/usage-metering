@@ -18,12 +18,7 @@ export async function findAccountWithPlan(ex: Executor, id: string) {
   return row ?? null;
 }
 
-
-export async function updateAccountPlan(
-  ex: Executor,
-  accountId: string,
-  planId: string,
-) {
+export async function updateAccountPlan(ex: Executor, accountId: string, planId: string) {
   const [row] = await ex
     .update(accounts)
     .set({
@@ -34,4 +29,9 @@ export async function updateAccountPlan(
     .returning();
 
   return row ?? null;
+}
+
+/** Row lock on the account: serialises operations that must not interleave for one account. */
+export async function lockAccount(ex: Executor, accountId: string): Promise<void> {
+  await ex.select({ id: accounts.id }).from(accounts).where(eq(accounts.id, accountId)).for("update");
 }

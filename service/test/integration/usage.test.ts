@@ -44,10 +44,7 @@ async function createUser(key: string, externalId: string) {
   return res.json().user as { id: string; externalId: string };
 }
 
-function usageRequest(
-  key: string | undefined,
-  query = "",
-) {
+function usageRequest(key: string | undefined, query = "") {
   return h.app.inject({
     method: "GET",
     url: `/v1/usage${query}`,
@@ -134,10 +131,7 @@ describe("GET /v1/usage — usage summary", () => {
   it("rejects an unknown user", async () => {
     const { apiKey } = await newAccount("usage-unknown-user");
 
-    const res = await usageRequest(
-      apiKey.key,
-      "?externalId=does-not-exist",
-    );
+    const res = await usageRequest(apiKey.key, "?externalId=does-not-exist");
 
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe("user_not_found");
@@ -154,10 +148,7 @@ describe("GET /v1/usage — usage summary", () => {
       [account.id],
     );
 
-    const res = await usageRequest(
-      apiKey.key,
-      `?externalId=${encodeURIComponent(user.externalId)}`,
-    );
+    const res = await usageRequest(apiKey.key, `?externalId=${encodeURIComponent(user.externalId)}`);
 
     expect(res.statusCode).toBe(200);
 

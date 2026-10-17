@@ -4,7 +4,6 @@ export function remaining(limit: number, used: number): number {
   return Math.max(0, limit - used);
 }
 
-
 export const monthlyAllowance = (scope: Scope): Rule => ({
   scope,
   name: "monthly_allowance",

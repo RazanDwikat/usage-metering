@@ -1,4 +1,3 @@
-
 export type Scope = "account" | "user";
 export type RuleName = "monthly_allowance" | "max_per_request";
 
@@ -31,6 +30,4 @@ export interface Rule {
   check(ctx: RuleContext): RuleResult;
 }
 
-export type Decision =
-  | { accepted: true }
-  | { accepted: false; scope: Scope; rule: RuleName; limit: number };
+export type Decision = { accepted: true } | { accepted: false; scope: Scope; rule: RuleName; limit: number };

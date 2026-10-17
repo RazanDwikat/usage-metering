@@ -1,22 +1,10 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { Db } from "../config/database.js";
 import { findAccountWithPlan } from "../repositories/accounts.repo.js";
-import {
-  findConsumeRequest,
-  insertConsumeRequest,
-} from "../repositories/consume.repo.js";
-import {
-  findPlanByIdForUpdate,
-  type PlanRow,
-} from "../repositories/plans.repo.js";
-import {
-  findUserByExternalId,
-  findUserByExternalIdForUpdate,
-} from "../repositories/users.repo.js";
-import {
-  getOrCreateCounterForUpdate,
-  incrementCounter,
-} from "../repositories/usage.repo.js";
+import { findConsumeRequest, insertConsumeRequest } from "../repositories/consume.repo.js";
+import { findPlanByIdForShare, type PlanRow } from "../repositories/plans.repo.js";
+import { findUserByExternalId, findUserByExternalIdForUpdate } from "../repositories/users.repo.js";
+import { getOrCreateCounterForUpdate, incrementCounter } from "../repositories/usage.repo.js";
 import { users } from "../db/schema.js";
 import { ConflictError, NotFoundError } from "../errors/app-error.js";
 import { monthStart } from "../lib/time.js";
@@ -29,20 +17,23 @@ export interface ConsumeInput {
   units: number;
 }
 
-function toConsumeResult(row: {
-  requestId: string;
-  units: number;
-  windowStart: string;
-  accepted: boolean;
-  rejectScope: "account" | "user" | null;
-  rejectRule: "monthly_allowance" | "max_per_request" | null;
-  accountRemaining: number;
-  userRemaining: number;
-  accountMonthlyLimit: number;
-  accountMaxPerRequest: number;
-  userMonthlyLimit: number;
-  userMaxPerRequest: number;
-}) {
+function toConsumeResult(
+  replayed: boolean,
+  row: {
+    requestId: string;
+    units: number;
+    windowStart: string;
+    accepted: boolean;
+    rejectScope: "account" | "user" | null;
+    rejectRule: "monthly_allowance" | "max_per_request" | null;
+    accountRemaining: number;
+    userRemaining: number;
+    accountMonthlyLimit: number;
+    accountMaxPerRequest: number;
+    userMonthlyLimit: number;
+    userMaxPerRequest: number;
+  },
+) {
   const rejectionLimit =
     row.rejectScope === null || row.rejectRule === null
       ? null
@@ -56,6 +47,7 @@ function toConsumeResult(row: {
 
   return {
     requestId: row.requestId,
+    replayed,
     accepted: row.accepted,
     units: row.units,
     windowStart: row.windowStart,
@@ -74,24 +66,15 @@ function toConsumeResult(row: {
   };
 }
 
-function isUsablePlan(
-  plan: PlanRow,
-  scope: "account" | "user",
-  accountId: string,
-): boolean {
+function isUsablePlan(plan: PlanRow, scope: "account" | "user", accountId: string): boolean {
   return (
     plan.scope === scope &&
-    (plan.ownerAccountId === null ||
-      plan.ownerAccountId === accountId) &&
+    (plan.ownerAccountId === null || plan.ownerAccountId === accountId) &&
     plan.archivedAt === null
   );
 }
 
-export async function consume(
-  db: Db,
-  accountId: string,
-  input: ConsumeInput,
-) {
+export async function consume(db: Db, accountId: string, input: ConsumeInput) {
   return db.transaction(async (tx) => {
     // Serialize retries that use the same account/request ID.
     // A hash collision only causes extra waiting; it does not affect correctness.
@@ -104,35 +87,23 @@ export async function consume(
     `);
 
     // Idempotency check: a matching retry returns the original decision.
-    const previous = await findConsumeRequest(
-      tx,
-      accountId,
-      input.requestId,
-    );
+    const previous = await findConsumeRequest(tx, accountId, input.requestId);
 
     if (previous) {
       const [previousUser] = await tx
         .select({ externalId: users.externalId })
         .from(users)
-        .where(
-          and(
-            eq(users.accountId, accountId),
-            eq(users.id, previous.userId),
-          ),
-        )
+        .where(and(eq(users.accountId, accountId), eq(users.id, previous.userId)))
         .limit(1);
 
-      if (
-        previous.units !== input.units ||
-        previousUser?.externalId !== input.externalId
-      ) {
+      if (previous.units !== input.units || previousUser?.externalId !== input.externalId) {
         throw new ConflictError(
           "idempotency_key_reused",
           "This requestId was already used with a different payload",
         );
       }
 
-      return toConsumeResult(previous);
+      return toConsumeResult(true, previous);
     }
 
     const accountData = await findAccountWithPlan(tx, accountId);
@@ -142,11 +113,7 @@ export async function consume(
     }
 
     // Read the user first, without locking it, to discover its plan ID.
-    const initialUser = await findUserByExternalId(
-      tx,
-      accountId,
-      input.externalId,
-    );
+    const initialUser = await findUserByExternalId(tx, accountId, input.externalId);
 
     if (!initialUser) {
       throw new NotFoundError("user_not_found", "User not found");
@@ -155,12 +122,14 @@ export async function consume(
     const accountPlanId = accountData.account.planId;
     const userPlanId = initialUser.planId;
 
+    // Share-lock the plans: plan edits/archiving (exclusive) wait for in-flight consumes, but consumes never
+    // wait for each other here. (An exclusive lock would serialise every account on a shared predefined plan.)
     // Always lock plan rows in the same sorted order.
     const planIds = [...new Set([accountPlanId, userPlanId])].sort();
     const lockedPlans = new Map<string, PlanRow>();
 
     for (const planId of planIds) {
-      const plan = await findPlanByIdForUpdate(tx, planId);
+      const plan = await findPlanByIdForShare(tx, planId);
 
       if (!plan) {
         throw new NotFoundError("plan_not_found", "Plan not found");
@@ -172,42 +141,23 @@ export async function consume(
     const accountPlan = lockedPlans.get(accountPlanId);
     const userPlan = lockedPlans.get(userPlanId);
 
-    if (
-      !accountPlan ||
-      !isUsablePlan(accountPlan, "account", accountId)
-    ) {
-      throw new ConflictError(
-        "account_plan_unavailable",
-        "The account plan is unavailable",
-      );
+    if (!accountPlan || !isUsablePlan(accountPlan, "account", accountId)) {
+      throw new ConflictError("account_plan_unavailable", "The account plan is unavailable");
     }
 
-    if (
-      !userPlan ||
-      !isUsablePlan(userPlan, "user", accountId)
-    ) {
-      throw new ConflictError(
-        "user_plan_unavailable",
-        "The user plan is unavailable",
-      );
+    if (!userPlan || !isUsablePlan(userPlan, "user", accountId)) {
+      throw new ConflictError("user_plan_unavailable", "The user plan is unavailable");
     }
 
     // Lock the user only after locking the plan rows.
-    const currentUser = await findUserByExternalIdForUpdate(
-      tx,
-      accountId,
-      input.externalId,
-    );
+    const currentUser = await findUserByExternalIdForUpdate(tx, accountId, input.externalId);
 
     if (!currentUser) {
       throw new NotFoundError("user_not_found", "User not found");
     }
 
     // The user might have changed plans between the initial read and the lock.
-    if (
-      currentUser.id !== initialUser.id ||
-      currentUser.planId !== userPlanId
-    ) {
+    if (currentUser.id !== initialUser.id || currentUser.planId !== userPlanId) {
       throw new ConflictError(
         "user_plan_changed",
         "The user's plan changed during this request; please retry",
@@ -287,6 +237,6 @@ export async function consume(
       userRemaining,
     });
 
-    return toConsumeResult(recorded);
+    return toConsumeResult(false, recorded);
   });
 }

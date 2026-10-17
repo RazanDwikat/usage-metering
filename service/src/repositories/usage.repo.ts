@@ -1,6 +1,6 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { Executor } from "../config/database.js";
-import { usageCounters } from "../db/schema.js";
+import { plans, usageCounters, users } from "../db/schema.js";
 
 export type UsageCounterRow = typeof usageCounters.$inferSelect;
 
@@ -10,11 +10,7 @@ interface CounterKey {
   windowStart: string;
 }
 
-
-export async function getOrCreateCounterForUpdate(
-  tx: Executor,
-  key: CounterKey,
-): Promise<UsageCounterRow> {
+export async function getOrCreateCounterForUpdate(tx: Executor, key: CounterKey): Promise<UsageCounterRow> {
   // Create the counter if this is the first usage in the month.
   await tx
     .insert(usageCounters)
@@ -27,11 +23,8 @@ export async function getOrCreateCounterForUpdate(
     })
     .onConflictDoNothing();
 
- 
   const userCondition =
-    key.userId === null
-      ? isNull(usageCounters.userId)
-      : eq(usageCounters.userId, key.userId);
+    key.userId === null ? isNull(usageCounters.userId) : eq(usageCounters.userId, key.userId);
 
   const [counter] = await tx
     .select()
@@ -54,7 +47,6 @@ export async function getOrCreateCounterForUpdate(
   return counter;
 }
 
-
 export async function incrementCounter(
   tx: Executor,
   counterId: number,
@@ -76,17 +68,13 @@ export async function incrementCounter(
   return updated;
 }
 
-
 export async function getUsageCounter(
   ex: Executor,
   accountId: string,
   userId: string | null,
   windowStart: string,
 ): Promise<UsageCounterRow | null> {
-  const userCondition =
-    userId === null
-      ? isNull(usageCounters.userId)
-      : eq(usageCounters.userId, userId);
+  const userCondition = userId === null ? isNull(usageCounters.userId) : eq(usageCounters.userId, userId);
 
   const [counter] = await ex
     .select()
@@ -102,4 +90,36 @@ export async function getUsageCounter(
     .limit(1);
 
   return counter ?? null;
+}
+
+/** One page of active users with their plan and their usage in the given month (0 when they have no counter yet). */
+export async function listUsersUsage(
+  ex: Executor,
+  accountId: string,
+  windowStart: string,
+  page: { limit: number; offset: number },
+) {
+  return ex
+    .select({
+      externalId: users.externalId,
+      planId: plans.id,
+      planName: plans.name,
+      monthlyLimit: plans.monthlyLimit,
+      used: sql<number>`coalesce(${usageCounters.used}, 0)`.mapWith(Number),
+    })
+    .from(users)
+    .innerJoin(plans, eq(users.planId, plans.id))
+    .leftJoin(
+      usageCounters,
+      and(
+        eq(usageCounters.accountId, users.accountId),
+        eq(usageCounters.userId, users.id),
+        eq(usageCounters.windowType, "month"),
+        eq(usageCounters.windowStart, windowStart),
+      ),
+    )
+    .where(and(eq(users.accountId, accountId), isNull(users.deletedAt)))
+    .orderBy(desc(users.createdAt), desc(users.id))
+    .limit(page.limit)
+    .offset(page.offset);
 }
