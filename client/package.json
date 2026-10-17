@@ -1,0 +1,7 @@
+{
+  "name": "usage-metering-example-client",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node server.js" }
+}

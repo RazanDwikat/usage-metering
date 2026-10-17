@@ -1,0 +1,91 @@
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --text: #1c2430; --muted: #667085; --line: #e4e7ec;
+  --accent: #2f6fed; --ok: #1a7f4b; --ok-bg: #e7f6ee; --bad: #b42318; --bad-bg: #fdecea; --bar: #dfe6f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12161c; --card: #1a2029; --text: #e6e9ef; --muted: #98a2b3; --line: #2b3340;
+    --accent: #6b9bff; --ok: #5bd69a; --ok-bg: #12301f; --bad: #ff8a80; --bad-bg: #3a1916; --bar: #2a3550;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header, main, footer { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding-top: 24px; }
+.brand { font-size: 22px; font-weight: 700; color: var(--text); text-decoration: none; }
+h2 { margin: 0 0 4px; font-size: 16px; }
+p { margin: 0; }
+a { color: var(--accent); }
+code { font-size: 12px; background: var(--bar); padding: 1px 5px; border-radius: 4px; word-break: break-all; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.hidden { display: none; }
+.title { font-size: 22px; margin: 24px 0 4px; }
+
+/* ---- home: three role cards ---- */
+.role-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin: 20px 0; }
+.role-card { display: flex; flex-direction: column; gap: 8px; padding: 18px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; color: var(--text); text-decoration: none; transition: border-color .15s, transform .15s; }
+.role-card:hover, .role-card:focus-visible { border-color: var(--accent); transform: translateY(-2px); }
+.role-card .role { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+.role-card h2 { font-size: 20px; margin: 0; }
+.role-card .meta { font-size: 13px; color: var(--muted); margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); }
+.role-card .count { font-size: 13px; font-weight: 600; }
+
+/* ---- navigation inside a page ---- */
+.crumbs { margin-top: 18px; font-size: 14px; color: var(--muted); }
+.crumbs a { text-decoration: none; }
+.company-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; padding: 10px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.company-bar select { font-weight: 600; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.pills a { padding: 6px 14px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); color: var(--text); text-decoration: none; font-size: 14px; }
+.pills a.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ---- cards, tables, forms ---- */
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-top: 16px; }
+.stack > * + * { margin-top: 12px; }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+td:first-child { white-space: normal; }
+th { color: var(--muted); font-weight: 500; font-size: 13px; }
+tr:last-child td { border-bottom: 0; }
+button, select, input { font: inherit; color: inherit; }
+button { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+button.danger { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
+button.small { padding: 3px 9px; font-size: 13px; }
+button:disabled { opacity: .5; cursor: default; }
+select, input[type="number"], input[type="text"], input[type="month"] { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+input[type="number"] { width: 90px; }
+td input[type="text"] { width: 150px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.form { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; }
+.form label { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); }
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.pager { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+
+.bar { width: 160px; height: 8px; background: var(--bar); border-radius: 4px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); }
+.bar.full > i { background: var(--bad); }
+.account-row { display: flex; flex-wrap: wrap; gap: 8px 32px; align-items: center; }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 13px; font-weight: 500; }
+.tag.ok { background: var(--ok-bg); color: var(--ok); }
+.tag.bad { background: var(--bad-bg); color: var(--bad); }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: var(--bar); color: var(--muted); }
+.badge.green { background: var(--ok-bg); color: var(--ok); }
+.msg { margin-top: 16px; padding: 10px 14px; border-radius: 8px; border: 1px solid; }
+.msg.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+.msg.bad { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
+.decision { padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.decision p + p { margin-top: 4px; }
+.keybox { padding: 10px; border: 1px dashed var(--accent); border-radius: 8px; word-break: break-all; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.detail { margin-top: 16px; padding: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+main > .muted.small { margin-top: 16px; }
+#view > .muted.small { margin-top: 16px; }
+
+footer { margin-top: 28px; margin-bottom: 40px; }
+#log { list-style: none; margin: 6px 0 0; padding: 0; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+#log .s2 { color: var(--ok); }
+#log .s4 { color: var(--bad); }
+
+@media (max-width: 640px) { td input[type="text"] { width: 110px; } }

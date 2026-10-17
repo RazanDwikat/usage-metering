@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Docs App – metering demo</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <a href="#home" class="brand">Docs App</a>
+      <span class="muted">Example client of the Usage Metering service</span>
+    </header>
+
+    <main>
+      <div id="msg" class="msg hidden" role="status"></div>
+      <div id="view"></div>
+    </main>
+
+    <footer>
+      <div class="muted small">Call log: every action above is one of these API calls (latest first)</div>
+      <ul id="log"></ul>
+    </footer>
+
+    <script src="/core.js"></script>
+    <script src="/home.js"></script>
+    <script src="/system.js"></script>
+    <script src="/company.js"></script>
+    <script src="/user.js"></script>
+    <script>start();</script>
+  </body>
+</html>
