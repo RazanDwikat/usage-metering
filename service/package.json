@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run test/unit",
-    "test:integration": "vitest run test/integration"
+    "test:integration": "vitest run test/integration",
+    "test:concurrency": "vitest run test/concurrency"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",
