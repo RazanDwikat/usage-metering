@@ -1,4 +1,7 @@
 
+export type Clock = () => Date;
+
+export const systemClock: Clock = () => new Date();
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -12,3 +15,4 @@ export function parseMonth(value: string): string | null {
   const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(value);
   return m ? `${m[1]}-${m[2]}-01` : null;
 }
+

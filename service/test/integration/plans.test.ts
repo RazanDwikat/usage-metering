@@ -505,3 +505,52 @@ describe("DELETE /v1/plans/:id", () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe("plan changes keep what was already consumed", () => {
+  it("an allowance reduced below the usage shows 0 remaining, rejects at that level, and works again once raised", async () => {
+    const s = await h.scenario({ monthlyLimit: 1000, maxPerRequest: 100 }, { monthlyLimit: 100, maxPerRequest: 50 });
+    await h.consume(s.key, "a", "u1", 50);
+    await h.consume(s.key, "b", "u1", 30); // the user has used 80
+
+    // user plan reduced to 60 while 80 were used
+    expect((await h.call("PATCH", `/v1/plans/${s.usrPlanId}`, s.key, { monthlyLimit: 60 })).status).toBe(200);
+    expect((await h.usage(s.key, "?externalId=u1")).user).toMatchObject({ limit: 60, used: 80, remaining: 0 });
+
+    const blocked = await h.consume(s.key, "c", "u1", 1);
+    expect(blocked.body).toMatchObject({
+      accepted: false,
+      remaining: { user: 0 },
+      rejection: { scope: "user", rule: "monthly_allowance", limit: 60 },
+    });
+    expect((await h.usage(s.key)).account.used).toBe(80); // the rejection consumed nothing
+
+    // raised again: 120 - 80 = 40 left
+    await h.call("PATCH", `/v1/plans/${s.usrPlanId}`, s.key, { monthlyLimit: 120 });
+    expect((await h.consume(s.key, "d", "u1", 40)).body).toMatchObject({ accepted: true, remaining: { user: 0 } });
+  });
+
+  it("the shared account allowance behaves the same way when the account plan is reduced below its usage", async () => {
+    const s = await h.scenario({ monthlyLimit: 1000, maxPerRequest: 100 }, { monthlyLimit: 10_000, maxPerRequest: 100 }, [
+      "u1",
+      "u2",
+    ]);
+    await h.consume(s.key, "a", "u1", 100);
+    await h.consume(s.key, "b", "u2", 100); // the account has used 200
+
+    await h.call("PATCH", `/v1/plans/${s.accPlanId}`, s.key, { monthlyLimit: 150 });
+    expect((await h.usage(s.key)).account).toMatchObject({ limit: 150, used: 200, remaining: 0 });
+
+    // both users are blocked by the ACCOUNT, although each still has a large personal allowance
+    for (const [i, user] of ["u1", "u2"].entries()) {
+      const r = await h.consume(s.key, `blocked-${i}`, user, 1);
+      expect(r.body.rejection).toEqual({ scope: "account", rule: "monthly_allowance", limit: 150 });
+      expect(r.body.remaining.account).toBe(0);
+    }
+
+    // history was preserved, including the rejections
+    expect((await h.call("GET", "/v1/usage/history", s.key)).body.history.pagination.total).toBe(4);
+
+    await h.call("PATCH", `/v1/plans/${s.accPlanId}`, s.key, { monthlyLimit: 1000 });
+    expect((await h.consume(s.key, "later", "u1", 100)).body.accepted).toBe(true);
+  });
+});

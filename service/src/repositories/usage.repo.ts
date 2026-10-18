@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Executor } from "../config/database.js";
 import { plans, usageCounters, users } from "../db/schema.js";
 
@@ -10,19 +10,7 @@ interface CounterKey {
   windowStart: string;
 }
 
-export async function getOrCreateCounterForUpdate(tx: Executor, key: CounterKey): Promise<UsageCounterRow> {
-  // Create the counter if this is the first usage in the month.
-  await tx
-    .insert(usageCounters)
-    .values({
-      accountId: key.accountId,
-      userId: key.userId,
-      windowType: "month",
-      windowStart: key.windowStart,
-      used: 0,
-    })
-    .onConflictDoNothing();
-
+async function selectCounterForUpdate(tx: Executor, key: CounterKey): Promise<UsageCounterRow | null> {
   const userCondition =
     key.userId === null ? isNull(usageCounters.userId) : eq(usageCounters.userId, key.userId);
 
@@ -40,32 +28,50 @@ export async function getOrCreateCounterForUpdate(tx: Executor, key: CounterKey)
     .limit(1)
     .for("update");
 
-  if (!counter) {
+  return counter ?? null;
+}
+
+/** Locks the counter row (creating it on the first usage of the month) and returns it. */
+export async function getOrCreateCounterForUpdate(tx: Executor, key: CounterKey): Promise<UsageCounterRow> {
+  // Fast path, one query: the counter exists for every request except the first one of the month.
+  const existing = await selectCounterForUpdate(tx, key);
+  if (existing) return existing;
+
+  // First usage this month. Concurrent first requests race here: the unique index lets exactly one insert win and the
+  // others do nothing (they wait for the winner to commit); then every one of them locks the same row.
+  await tx
+    .insert(usageCounters)
+    .values({
+      accountId: key.accountId,
+      userId: key.userId,
+      windowType: "month",
+      windowStart: key.windowStart,
+      used: 0,
+    })
+    .onConflictDoNothing();
+
+  const created = await selectCounterForUpdate(tx, key);
+  if (!created) {
     throw new Error("Failed to create or lock usage counter");
   }
 
-  return counter;
+  return created;
 }
 
-export async function incrementCounter(
-  tx: Executor,
-  counterId: number,
-  units: number,
-): Promise<UsageCounterRow> {
-  const [updated] = await tx
+/** Adds `units` to several counters in ONE statement (the caller already holds their row locks). */
+export async function incrementCounters(tx: Executor, counterIds: number[], units: number): Promise<void> {
+  const updated = await tx
     .update(usageCounters)
     .set({
       used: sql`${usageCounters.used} + ${units}`,
       updatedAt: new Date(),
     })
-    .where(eq(usageCounters.id, counterId))
-    .returning();
+    .where(inArray(usageCounters.id, counterIds))
+    .returning({ id: usageCounters.id });
 
-  if (!updated) {
+  if (updated.length !== counterIds.length) {
     throw new Error("Failed to update usage counter");
   }
-
-  return updated;
 }
 
 export async function getUsageCounter(

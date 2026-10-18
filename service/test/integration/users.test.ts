@@ -293,6 +293,30 @@ describe("PUT /v1/users/:id/plan — changing plans", () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("validation_error");
   });
+
+  it("keeps the user's usage (no fresh allowance) and leaves the old decisions in the history with their old limits", async () => {
+    const s = await h.scenario({ monthlyLimit: 1000, maxPerRequest: 100 }, { monthlyLimit: 50, maxPerRequest: 50 });
+    const bigger = (
+      await h.call("POST", "/v1/plans", s.key, { name: "bigger", scope: "user", monthlyLimit: 100, maxPerRequest: 50 })
+    ).body.plan;
+
+    expect((await h.consume(s.key, "before-switch", "u1", 40)).body.remaining.user).toBe(10);
+
+    const switched = await h.call("PUT", `/v1/users/${s.ids.u1}/plan`, s.key, { planId: bigger.id });
+    expect(switched.status).toBe(200);
+
+    // 100 allowance minus the 40 already used, not a fresh 100
+    const after = await h.usage(s.key, "?externalId=u1");
+    expect(after.user).toMatchObject({ limit: 100, used: 40, remaining: 60 });
+    expect(after.account).toMatchObject({ used: 40, remaining: 960 });
+
+    expect((await h.consume(s.key, "after-switch", "u1", 50)).body).toMatchObject({ accepted: true, remaining: { user: 10 } });
+
+    const items = (await h.call("GET", "/v1/usage/history?externalId=u1", s.key)).body.history.items;
+    const byId = (id: string) => items.find((i: { requestId: string }) => i.requestId === id);
+    expect(byId("before-switch")).toMatchObject({ userMonthlyLimit: 50, userRemaining: 10 });
+    expect(byId("after-switch")).toMatchObject({ userMonthlyLimit: 100, userRemaining: 10 });
+  });
 });
 
 describe("DELETE /v1/users/:id — soft deletion", () => {

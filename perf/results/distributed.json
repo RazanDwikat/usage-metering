@@ -1,0 +1,735 @@
+{
+  "metrics": {
+    "iterations": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 12056,
+        "rate": 365.4041484912181
+      }
+    },
+    "data_received": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 4444742,
+        "rate": 134715.25927116405
+      }
+    },
+    "iteration_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 124.65075821275693,
+        "med": 115.6796555,
+        "p(90)": 184.056244,
+        "p(95)": 215.54062875,
+        "p(99)": 318.4224305500001,
+        "max": 658.012171
+      }
+    },
+    "checks": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 12056,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate==1": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_sending": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(99)": 0.367053,
+        "max": 11.919955,
+        "avg": 0.060600596851145314,
+        "med": 0.0306505,
+        "p(90)": 0.06485450000000001,
+        "p(95)": 0.08310275
+      }
+    },
+    "http_req_blocked": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 0.01613225,
+        "p(99)": 0.0630805,
+        "max": 11.004495,
+        "avg": 0.023641678753180614,
+        "med": 0.007320500000000001,
+        "p(90)": 0.012483500000000002
+      }
+    },
+    "accepted_units": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 12056,
+        "rate": 365.4041484912181
+      }
+    },
+    "http_reqs": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 12576,
+        "rate": 381.16477865175506
+      }
+    },
+    "http_req_duration{expected_response:true}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 119.17743428673701,
+        "med": 113.01544150000001,
+        "p(90)": 181.8596715,
+        "p(95)": 213.09995825000001,
+        "p(99)": 314.684926,
+        "max": 657.553377
+      }
+    },
+    "http_req_receiving": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 0.2526515,
+        "p(99)": 1.2164755,
+        "max": 21.977185,
+        "avg": 0.1462498786577606,
+        "med": 0.101564,
+        "p(90)": 0.18558
+      }
+    },
+    "http_req_tls_handshaking": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 0,
+        "avg": 0,
+        "med": 0,
+        "p(90)": 0,
+        "p(95)": 0,
+        "p(99)": 0
+      }
+    },
+    "http_req_waiting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 118.97058381122729,
+        "med": 112.8275075,
+        "p(90)": 181.5561905,
+        "p(95)": 212.72981299999998,
+        "p(99)": 312.91296875,
+        "max": 657.410817
+      }
+    },
+    "vus": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 0,
+        "min": 0,
+        "max": 50
+      }
+    },
+    "vus_max": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "max": 50,
+        "value": 50,
+        "min": 50
+      }
+    },
+    "data_sent": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 3189865,
+        "rate": 96681.31255200227
+      }
+    },
+    "http_req_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 119.17743428673701,
+        "med": 113.01544150000001,
+        "p(90)": 181.8596715,
+        "p(95)": 213.09995825000001,
+        "p(99)": 314.684926,
+        "max": 657.553377
+      }
+    },
+    "http_req_failed": {
+      "values": {
+        "fails": 12576,
+        "rate": 0,
+        "passes": 0
+      },
+      "thresholds": {
+        "rate==0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "http_req_connecting": {
+      "values": {
+        "p(99)": 0,
+        "max": 7.319449,
+        "avg": 0.009305203721374045,
+        "med": 0,
+        "p(90)": 0,
+        "p(95)": 0
+      },
+      "type": "trend",
+      "contains": "time"
+    }
+  },
+  "setup_data": {
+    "accounts": [
+      {
+        "key": "mk_22stEozVRawOCftcKOVb3qdr2hBDHVyxm0VnDmLwwCI",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_m5a_4tAqnLm7EfPJ5TQltWO5yycLYtel04M6nGr1L-4",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_dc367A6fRTyLQZPDwgQzW7LEXerAkZRqf0AL-g0FMqY",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_hpGnWZnmrc6F7CT5_yomoCdNifIh8iYf62py4xO3gb4",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ],
+        "key": "mk_Rb0CTtOa-pSnW1l_WBXLWySr2p0bzq5s39gd4DGjTgU"
+      },
+      {
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ],
+        "key": "mk_jnoJZQL0kC3J7zS0uQ078aS8pDYDsYIO1LFCRgftpg4"
+      },
+      {
+        "key": "mk_Z4ZaBEEFZDBjCUFHiEdwOv1IJD4_bQKi0YURfE8u9Iw",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_6hydNtgbTMxEN18RcSvT_dylA2rwnOz2Jz6QBrZLMUA",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_nlqBoBTVJousl5sr8l2VE7o2ETEzn_YoAgKQCmnbnYg",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_FbE52cumaraI_kdnJ0rHJI1H3zUaAGiyeLR4HcYGavU",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_lfq1-OHtDcqzMI0s6RM_nq8uyyPmsqsgvtQO50e1aEg",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_JywDGT0chXzsTX0bbpFsURbmAjKzJ_e3tRBRwXKuYQc",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_9w5L2mfOcmjBeDN-c_7nHMAyu7JshxFp8I-JmMSr-Eg",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_oxH6591cDGHFL9QpIG-Gb-knk_VvN3JXnZc6AiD-YWk",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_S-CJ0w-HYHbfgPOr8F-p4QHYOd_tFFXHp5reDsntxk0",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_vDRZLPUkdWP29WSB5lQF1E_3pu8Ws2dpunsTE-1iZ4I",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_84pTSTOnFQg5bqKpti9WyFrvNqJhW9xR6OueHmU9qC8",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_bcDASpD48uG2zmAcFnysqNFsskKsVZ5Q_6wmQooL6Zc",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_lH1YAxU_KN6THqLfTkqlCuSgFm97eD_G1HWDCJgMFqw",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      },
+      {
+        "key": "mk_5taPFVhqETzNUo-lfS1lfO2WH5k9d4naViWv-6YmITI",
+        "users": [
+          "u0",
+          "u1",
+          "u2",
+          "u3",
+          "u4",
+          "u5",
+          "u6",
+          "u7",
+          "u8",
+          "u9",
+          "u10",
+          "u11",
+          "u12",
+          "u13",
+          "u14",
+          "u15",
+          "u16",
+          "u17",
+          "u18",
+          "u19"
+        ]
+      }
+    ],
+    "run": 1792322177946
+  },
+  "root_group": {
+    "name": "",
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": [],
+    "checks": [
+        {
+          "passes": 12056,
+          "fails": 0,
+          "name": "consume returned 200",
+          "path": "::consume returned 200",
+          "id": "a16ef144f6271a15ba5cac26b05ffc52"
+        }
+      ]
+  },
+  "options": {
+    "summaryTrendStats": [
+      "avg",
+      "med",
+      "p(90)",
+      "p(95)",
+      "p(99)",
+      "max"
+    ],
+    "summaryTimeUnit": "",
+    "noColor": false
+  },
+  "state": {
+    "isStdOutTTY": false,
+    "isStdErrTTY": false,
+    "testRunDurationMs": 32993.604615
+  }
+}

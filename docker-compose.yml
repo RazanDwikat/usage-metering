@@ -21,8 +21,11 @@ services:
       NODE_ENV: production
       PORT: "3000"
       DATABASE_URL: postgres://metering:metering@db:5432/metering
-      DB_POOL_MAX: ${DB_POOL_MAX:-20}
+      # total Postgres connections = WEB_CONCURRENCY x DB_POOL_MAX (Postgres allows 100 by default)
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "3000:3000"
     depends_on:
@@ -43,11 +46,29 @@ services:
       SERVICE_URL: http://service:3000
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
       PORT: "8080"
+    volumes:
+      - clientdata:/data # the demo companies and their API keys survive "docker compose down"
     ports:
       - "8080:8080"
     depends_on:
       service:
         condition: service_healthy
 
+  # Load tests (not started by "up"): docker compose --profile perf run --rm k6 run -e SCENARIO=hot_account /perf/load.js
+  k6:
+    image: grafana/k6:latest
+    profiles: ["perf"]
+    user: root
+    working_dir: /perf
+    volumes:
+      - ./perf:/perf
+    environment:
+      BASE_URL: http://service:3000
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+    depends_on:
+      service:
+        condition: service_healthy
+
 volumes:
   pgdata:
+  clientdata:

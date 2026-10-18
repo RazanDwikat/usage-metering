@@ -1,10 +1,14 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp, type TestApp } from "../helpers/app.js";
 
 let h: TestApp;
 
 beforeAll(async () => {
   h = await createTestApp();
+});
+
+afterEach(() => {
+  h.setNow(null);
 });
 
 afterAll(async () => {
@@ -231,5 +235,46 @@ describe("GET /v1/usage/history — request history", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().history.items).toHaveLength(0);
+  });
+});
+
+describe("GET /v1/usage/history — months and deleted users", () => {
+  it("previous months stay queryable: usage per user and request history", async () => {
+    const s = await h.scenario({ monthlyLimit: 1000, maxPerRequest: 100 }, { monthlyLimit: 100, maxPerRequest: 50 }, [
+      "u1",
+      "u2",
+    ]);
+
+    h.setNow("2026-05-15T00:00:00Z");
+    await h.consume(s.key, "may-1", "u1", 30);
+    await h.consume(s.key, "may-2", "u2", 20);
+    await h.consume(s.key, "may-3", "u2", 80); // rejected: above the per-request limit
+
+    h.setNow("2026-06-15T00:00:00Z");
+    await h.consume(s.key, "jun-1", "u1", 5);
+
+    const may = (await h.call("GET", "/v1/usage/users?month=2026-05", s.key)).body;
+    const used = Object.fromEntries(may.users.map((u: { externalId: string; used: number }) => [u.externalId, u.used]));
+    expect(used).toEqual({ u1: 30, u2: 20 });
+
+    const mayHistory = (await h.call("GET", "/v1/usage/history?month=2026-05", s.key)).body.history;
+    expect(mayHistory.period).toBe("2026-05");
+    expect(mayHistory.pagination.total).toBe(3);
+    expect(mayHistory.items.filter((i: { accepted: boolean }) => !i.accepted)).toHaveLength(1);
+
+    const juneHistory = (await h.call("GET", "/v1/usage/history", s.key)).body.history; // default = current month
+    expect(juneHistory.period).toBe("2026-06");
+    expect(juneHistory.pagination.total).toBe(1);
+    expect(juneHistory.items[0]).toMatchObject({ requestId: "jun-1", units: 5, windowStart: "2026-06-01" });
+  });
+
+  it("keeps the request history of a deleted user", async () => {
+    const s = await h.scenario({ monthlyLimit: 1000, maxPerRequest: 100 }, { monthlyLimit: 100, maxPerRequest: 50 });
+    await h.consume(s.key, "kept", "u1", 5);
+    expect((await h.call("DELETE", `/v1/users/${s.ids.u1}`, s.key)).status).toBe(204);
+
+    const history = (await h.call("GET", "/v1/usage/history", s.key)).body.history;
+    expect(history.pagination.total).toBe(1);
+    expect(history.items[0]).toMatchObject({ requestId: "kept", externalId: "u1", accepted: true });
   });
 });

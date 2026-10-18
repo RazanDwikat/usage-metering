@@ -7,7 +7,7 @@ describe("GET /health", () => {
     const pool = { query: async () => ({ rows: [] }) } as unknown as Pool;
     const app = buildApp({
       db: {} as Db,
-      config: { DATABASE_URL: "x", ADMIN_TOKEN: "12345678", PORT: 3000, DB_POOL_MAX: 1 },
+      config: { DATABASE_URL: "x", ADMIN_TOKEN: "12345678", PORT: 3000, DB_POOL_MAX: 1, WEB_CONCURRENCY: 1 },
       pool,
     });
     const res = await app.inject({ method: "GET", url: "/health" });

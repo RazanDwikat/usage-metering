@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import type { Executor } from "../config/database.js";
 import { accounts, plans, users } from "../db/schema.js";
 
@@ -106,6 +106,11 @@ export async function isPlanAssignedToActiveEntities(ex: Executor, planId: strin
 export async function findPlanByIdForShare(ex: Executor, id: string): Promise<PlanRow | null> {
   const [row] = await ex.select().from(plans).where(eq(plans.id, id)).limit(1).for("share");
   return row ?? null;
+}
+
+/** Share-locks several plans in ONE statement, in id order (so every caller locks them in the same order). */
+export async function findPlansByIdsForShare(ex: Executor, ids: string[]): Promise<PlanRow[]> {
+  return ex.select().from(plans).where(inArray(plans.id, ids)).orderBy(plans.id).for("share");
 }
 
 export async function findPlanByIdForUpdate(ex: Executor, id: string): Promise<PlanRow | null> {

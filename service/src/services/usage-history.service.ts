@@ -1,7 +1,7 @@
 import type { Db } from "../config/database.js";
 import { countConsumeHistory, listConsumeHistory } from "../repositories/consume.repo.js";
 import { BadRequestError, NotFoundError } from "../errors/app-error.js";
-import { monthStart, parseMonth } from "../lib/time.js";
+import { monthStart, parseMonth, systemClock, type Clock } from "../lib/time.js";
 import { findAccountWithPlan } from "../repositories/accounts.repo.js";
 
 interface UsageHistoryInput {
@@ -11,8 +11,13 @@ interface UsageHistoryInput {
   offset: number;
 }
 
-export async function getUsageHistory(db: Db, accountId: string, input: UsageHistoryInput) {
-  const windowStart = input.month ? parseMonth(input.month) : monthStart(new Date());
+export async function getUsageHistory(
+  db: Db,
+  accountId: string,
+  input: UsageHistoryInput,
+  now: Clock = systemClock,
+) {
+  const windowStart = input.month ? parseMonth(input.month) : monthStart(now());
 
   if (!windowStart) {
     throw new BadRequestError("invalid_month", "month must use YYYY-MM format");

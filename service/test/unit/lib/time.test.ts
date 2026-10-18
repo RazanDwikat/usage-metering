@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { monthStart, parseMonth } from "../../../src/lib/time.js";
+import { monthStart, parseMonth, systemClock } from "../../../src/lib/time.js";
 
 describe("monthStart (UTC)", () => {
   it.each([
@@ -35,5 +35,14 @@ describe("parseMonth", () => {
     { input: "abcd-ef", expected: null },
   ])("'$input' -> $expected", ({ input, expected }) => {
     expect(parseMonth(input)).toBe(expected);
+  });
+});
+
+describe("systemClock", () => {
+  it("returns the current time", () => {
+    const before = Date.now();
+    const now = systemClock().getTime();
+    expect(now).toBeGreaterThanOrEqual(before);
+    expect(now).toBeLessThanOrEqual(Date.now());
   });
 });

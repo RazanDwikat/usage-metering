@@ -2,12 +2,12 @@ import { and, eq, sql } from "drizzle-orm";
 import type { Db } from "../config/database.js";
 import { findAccountWithPlan } from "../repositories/accounts.repo.js";
 import { findConsumeRequest, insertConsumeRequest } from "../repositories/consume.repo.js";
-import { findPlanByIdForShare, type PlanRow } from "../repositories/plans.repo.js";
+import { findPlansByIdsForShare, type PlanRow } from "../repositories/plans.repo.js";
 import { findUserByExternalId, findUserByExternalIdForUpdate } from "../repositories/users.repo.js";
-import { getOrCreateCounterForUpdate, incrementCounter } from "../repositories/usage.repo.js";
+import { getOrCreateCounterForUpdate, incrementCounters } from "../repositories/usage.repo.js";
 import { users } from "../db/schema.js";
 import { ConflictError, NotFoundError } from "../errors/app-error.js";
-import { monthStart } from "../lib/time.js";
+import { monthStart, systemClock, type Clock } from "../lib/time.js";
 import { evaluate } from "../rules/evaluate.js";
 import { remaining } from "../rules/monthly-allowance.js";
 
@@ -74,7 +74,26 @@ function isUsablePlan(plan: PlanRow, scope: "account" | "user", accountId: strin
   );
 }
 
-export async function consume(db: Db, accountId: string, input: ConsumeInput) {
+/** How many times a request is re-run when the user's plan changed between our unlocked read and our lock. */
+const MAX_ATTEMPTS = 3;
+
+/**
+ * Decides one consume request. Nothing is recorded by a failed attempt (the whole transaction rolls back),
+ * so when the user's plan was switched while we were about to lock it we simply start over with the new plan:
+ * the caller only sees a 409 `user_plan_changed` if the plan keeps changing under us for several attempts in a row.
+ */
+export async function consume(db: Db, accountId: string, input: ConsumeInput, now: Clock = systemClock) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await consumeOnce(db, accountId, input, now);
+    } catch (err) {
+      const planChanged = err instanceof ConflictError && err.code === "user_plan_changed";
+      if (!planChanged || attempt >= MAX_ATTEMPTS) throw err;
+    }
+  }
+}
+
+async function consumeOnce(db: Db, accountId: string, input: ConsumeInput, now: Clock) {
   return db.transaction(async (tx) => {
     // Serialize retries that use the same account/request ID.
     // A hash collision only causes extra waiting; it does not affect correctness.
@@ -124,18 +143,12 @@ export async function consume(db: Db, accountId: string, input: ConsumeInput) {
 
     // Share-lock the plans: plan edits/archiving (exclusive) wait for in-flight consumes, but consumes never
     // wait for each other here. (An exclusive lock would serialise every account on a shared predefined plan.)
-    // Always lock plan rows in the same sorted order.
-    const planIds = [...new Set([accountPlanId, userPlanId])].sort();
-    const lockedPlans = new Map<string, PlanRow>();
+    // One statement locks both rows, always in id order.
+    const planIds = [...new Set([accountPlanId, userPlanId])];
+    const lockedPlans = new Map((await findPlansByIdsForShare(tx, planIds)).map((plan) => [plan.id, plan]));
 
-    for (const planId of planIds) {
-      const plan = await findPlanByIdForShare(tx, planId);
-
-      if (!plan) {
-        throw new NotFoundError("plan_not_found", "Plan not found");
-      }
-
-      lockedPlans.set(planId, plan);
+    if (lockedPlans.size !== planIds.length) {
+      throw new NotFoundError("plan_not_found", "Plan not found");
     }
 
     const accountPlan = lockedPlans.get(accountPlanId);
@@ -164,18 +177,20 @@ export async function consume(db: Db, accountId: string, input: ConsumeInput) {
       );
     }
 
-    const windowStart = monthStart(new Date());
+    const windowStart = monthStart(now());
 
-    // Lock counters in a consistent order: account first, then user.
-    const accountCounter = await getOrCreateCounterForUpdate(tx, {
-      accountId,
-      userId: null,
-      windowStart,
-    });
-
+    // Lock counters in one fixed order for every request: the user's counter, then the shared account counter.
+    // The account counter is the hot lock (every request of the account takes it), so it is taken as late as
+    // possible: the less work happens between taking it and COMMIT, the more requests per second one account can do.
     const userCounter = await getOrCreateCounterForUpdate(tx, {
       accountId,
       userId: currentUser.id,
+      windowStart,
+    });
+
+    const accountCounter = await getOrCreateCounterForUpdate(tx, {
+      accountId,
+      userId: null,
       windowStart,
     });
 
@@ -214,8 +229,7 @@ export async function consume(db: Db, accountId: string, input: ConsumeInput) {
     );
 
     if (decision.accepted) {
-      await incrementCounter(tx, accountCounter.id, input.units);
-      await incrementCounter(tx, userCounter.id, input.units);
+      await incrementCounters(tx, [accountCounter.id, userCounter.id], input.units);
     }
 
     const recorded = await insertConsumeRequest(tx, {

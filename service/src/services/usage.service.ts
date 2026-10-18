@@ -5,15 +5,15 @@ import { countActiveUsers, findUserByExternalId } from "../repositories/users.re
 import { findPlanById } from "../repositories/plans.repo.js";
 import { BadRequestError, NotFoundError } from "../errors/app-error.js";
 import { remaining } from "../rules/monthly-allowance.js";
-import { monthStart, parseMonth } from "../lib/time.js";
+import { monthStart, parseMonth, systemClock, type Clock } from "../lib/time.js";
 
 interface UsageInput {
   month?: string;
   externalId?: string;
 }
 
-export async function getUsage(db: Db, accountId: string, input: UsageInput = {}) {
-  const windowStart = input.month ? parseMonth(input.month) : monthStart(new Date());
+export async function getUsage(db: Db, accountId: string, input: UsageInput = {}, now: Clock = systemClock) {
+  const windowStart = input.month ? parseMonth(input.month) : monthStart(now());
 
   if (!windowStart) {
     throw new BadRequestError("invalid_month", "month must use YYYY-MM format");
@@ -93,8 +93,8 @@ interface UsersUsageInput {
 }
 
 /** Usage of every active user in a month. Limits shown are those of each user's CURRENT plan. */
-export async function getUsersUsage(db: Db, accountId: string, input: UsersUsageInput) {
-  const windowStart = input.month ? parseMonth(input.month) : monthStart(new Date());
+export async function getUsersUsage(db: Db, accountId: string, input: UsersUsageInput, now: Clock = systemClock) {
+  const windowStart = input.month ? parseMonth(input.month) : monthStart(now());
   if (!windowStart) {
     throw new BadRequestError("invalid_month", "month must use YYYY-MM format");
   }

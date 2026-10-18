@@ -1,10 +1,14 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp, type TestApp } from "../helpers/app.js";
 
 let h: TestApp;
 
 beforeAll(async () => {
   h = await createTestApp();
+});
+
+afterEach(() => {
+  h.setNow(null);
 });
 
 afterAll(async () => {
@@ -160,5 +164,31 @@ describe("GET /v1/usage — usage summary", () => {
     );
 
     expect(after.rows[0]?.count).toBe(before.rows[0]?.count);
+  });
+});
+
+describe("GET /v1/usage — UTC month boundaries", () => {
+  it("counts a request in the month it is processed in, and each new month starts at zero", async () => {
+    const s = await h.scenario({ monthlyLimit: 1000, maxPerRequest: 100 }, { monthlyLimit: 100, maxPerRequest: 50 });
+
+    h.setNow("2026-01-31T23:59:59.999Z"); // last millisecond of January
+    const jan = await h.consume(s.key, "jan-1", "u1", 40);
+    expect(jan.status).toBe(200);
+    expect(jan.body).toMatchObject({ accepted: true, windowStart: "2026-01-01", remaining: { account: 960, user: 60 } });
+
+    h.setNow("2026-02-01T00:00:00.000Z"); // first millisecond of February
+    const feb = await h.consume(s.key, "feb-1", "u1", 10);
+    expect(feb.body).toMatchObject({ accepted: true, windowStart: "2026-02-01", remaining: { account: 990, user: 90 } });
+
+    // the current month (February) only knows about February...
+    const current = await h.usage(s.key, "?externalId=u1");
+    expect(current.period).toBe("2026-02");
+    expect(current.account).toMatchObject({ used: 10, remaining: 990 });
+    expect(current.user).toMatchObject({ used: 10, remaining: 90 });
+
+    // ...and January is still there, untouched
+    const past = await h.usage(s.key, "?month=2026-01&externalId=u1");
+    expect(past.account).toMatchObject({ used: 40, remaining: 960 });
+    expect(past.user).toMatchObject({ used: 40, remaining: 60 });
   });
 });
