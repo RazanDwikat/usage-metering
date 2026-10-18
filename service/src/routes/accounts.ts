@@ -4,7 +4,7 @@ import type { Config } from "../config/env.js";
 import { requireAdmin } from "../middlewares/admin-auth.js";
 import { requireApiKey } from "../middlewares/api-key-auth.js";
 import { changeAccountPlan, createAccount, getAccount } from "../services/account.service.js";
-import { createApiKey, getApiKeys, revokeApiKey } from "../services/api-key.service.js";
+import { createApiKey, getApiKeys, issueApiKeyForAccount, revokeApiKey } from "../services/api-key.service.js";
 import { createAccountBody, updateAccountPlanBody } from "../validators/accounts.js";
 import { uuidParams } from "../validators/common.js";
 
@@ -18,6 +18,13 @@ export const accountRoutes =
       const body = createAccountBody.parse(req.body);
       const created = await createAccount(db, body);
       return reply.status(201).header("cache-control", "no-store").send(created);
+    });
+
+    // Operator-only recovery: an account that lost every key cannot call the key routes below, so the operator issues one.
+    app.post("/accounts/:id/api-keys", { onRequest: requireAdmin(config.ADMIN_TOKEN) }, async (req, reply) => {
+      const { id } = uuidParams.parse(req.params);
+      const apiKey = await issueApiKeyForAccount(db, id);
+      return reply.status(201).header("cache-control", "no-store").send({ apiKey });
     });
 
     // Everything below acts on the calling account, identified by its API key.

@@ -150,6 +150,100 @@ describe("authentication happens before the body is parsed", () => {
   });
 });
 
+describe("deleted users in the usage list", () => {
+  it("are listed with a note, last, so the users add up to the account total", async () => {
+    const { apiKey } = await newAccount("usage-deleted");
+    await makeUser(apiKey.key, "stays");
+    const gone = await makeUser(apiKey.key, "gone");
+    await makeUser(apiKey.key, "gone-idle");
+    await call(apiKey.key, "POST", "/v1/consume", { requestId: "s", externalId: "stays", units: 7 });
+    await call(apiKey.key, "POST", "/v1/consume", { requestId: "g", externalId: "gone", units: 5 });
+    expect((await call(apiKey.key, "DELETE", `/v1/users/${gone.id}`)).statusCode).toBe(204);
+    const idle = (await call(apiKey.key, "GET", "/v1/users")).json().users.find(
+      (u: { externalId: string }) => u.externalId === "gone-idle",
+    );
+    expect((await call(apiKey.key, "DELETE", `/v1/users/${idle.id}`)).statusCode).toBe(204);
+
+    const list = (await call(apiKey.key, "GET", "/v1/usage/users")).json();
+    const names = list.users.map((u: { externalId: string }) => u.externalId);
+    // the deleted user that used units is listed (after the active one); the deleted user without usage is not
+    expect(names).toEqual(["stays", "gone"]);
+    expect(list.pagination.total).toBe(2);
+
+    const [active, deleted] = list.users;
+    expect(active).toMatchObject({ deleted: false, deletedAt: null, note: null, used: 7 });
+    expect(deleted).toMatchObject({ deleted: true, used: 5, remaining: 0 });
+    expect(deleted.deletedAt).toEqual(expect.any(String));
+    expect(deleted.note).toMatch(/deleted/i);
+
+    const account = (await call(apiKey.key, "GET", "/v1/usage")).json().usage.account;
+    expect(list.users.reduce((sum: number, u: { used: number }) => sum + u.used, 0)).toBe(account.used);
+  });
+
+  it("a deleted user does not appear in months where it used nothing, and pagination counts it", async () => {
+    const { apiKey } = await newAccount("usage-deleted-months");
+    const u = await makeUser(apiKey.key, "short-lived");
+    await makeUser(apiKey.key, "other");
+    await call(apiKey.key, "POST", "/v1/consume", { requestId: "x", externalId: "short-lived", units: 1 });
+    await call(apiKey.key, "DELETE", `/v1/users/${u.id}`);
+
+    const past = (await call(apiKey.key, "GET", "/v1/usage/users?month=2020-01")).json();
+    expect(past.users.map((x: { externalId: string }) => x.externalId)).toEqual(["other"]);
+    expect(past.pagination.total).toBe(1);
+
+    const page1 = (await call(apiKey.key, "GET", "/v1/usage/users?limit=1&offset=0")).json();
+    const page2 = (await call(apiKey.key, "GET", "/v1/usage/users?limit=1&offset=1")).json();
+    expect(page1.pagination.total).toBe(2);
+    expect([page1.users[0].externalId, page2.users[0].externalId]).toEqual(["other", "short-lived"]);
+  });
+});
+
+describe("POST /v1/accounts/:id/api-keys — operator key recovery", () => {
+  const issue = (id: string, headers: Record<string, string> = h.admin) =>
+    h.app.inject({ method: "POST", url: `/v1/accounts/${id}/api-keys`, headers });
+
+  it("issues a working key to an account that lost all of its keys", async () => {
+    const { account, apiKey } = await newAccount("recover");
+    // every key lost: revoked directly, because the API itself refuses to revoke the last active key
+    await h.t.pool.query("UPDATE api_keys SET revoked_at = now() WHERE account_id = $1", [account.id]);
+    expect((await call(apiKey.key, "GET", "/v1/account")).statusCode).toBe(401);
+
+    const res = await issue(account.id);
+    expect(res.statusCode).toBe(201);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    const fresh = res.json().apiKey as { key: string; prefix: string };
+    expect(fresh.key).toMatch(/^mk_/);
+
+    const me = await call(fresh.key, "GET", "/v1/account");
+    expect(me.statusCode).toBe(200);
+    expect(me.json().account.id).toBe(account.id);
+  });
+
+  it("needs the admin token: no token, a wrong token, or an account's own API key are all 401", async () => {
+    const { account, apiKey } = await newAccount("recover-auth");
+    expect((await issue(account.id, {})).statusCode).toBe(401);
+    expect((await issue(account.id, { "x-admin-token": "nope" })).statusCode).toBe(401);
+    expect((await issue(account.id, { "x-api-key": apiKey.key })).statusCode).toBe(401);
+    // nothing was issued
+    expect((await call(apiKey.key, "GET", "/v1/account/api-keys")).json().apiKeys).toHaveLength(1);
+  });
+
+  it("only touches the account it names: the new key belongs to that account", async () => {
+    const a = await newAccount("recover-a");
+    const b = await newAccount("recover-b");
+    const fresh = (await issue(a.account.id)).json().apiKey.key as string;
+    expect((await call(fresh, "GET", "/v1/account")).json().account.id).toBe(a.account.id);
+    expect((await call(b.apiKey.key, "GET", "/v1/account/api-keys")).json().apiKeys).toHaveLength(1);
+  });
+
+  it("an unknown account is 404 and a malformed id is 400", async () => {
+    const unknown = await issue("00000000-0000-4000-8000-000000000000");
+    expect(unknown.statusCode).toBe(404);
+    expect(unknown.json().error.code).toBe("account_not_found");
+    expect((await issue("not-a-uuid")).statusCode).toBe(400);
+  });
+});
+
 describe("API key rotation", () => {
   it("lists keys without secrets", async () => {
     const { apiKey } = await newAccount("keys-list");

@@ -153,7 +153,7 @@ companySections.usage = async () => {
       ${u.user ? `<div><div class="muted small">${esc(u.user.externalId)}</div>${allowance(u.user)}</div>` : ""}</div></section>
     <section class="card"><h2>Every employee in ${esc(u.period)}</h2><div class="scroll"><table>
       <tr><th>Employee</th><th>Plan</th><th>Allowance</th></tr>
-      ${per.users.map((x) => `<tr><td><b>${esc(x.externalId)}</b></td><td>${esc(x.plan.name)}</td><td>${allowance(x)}</td></tr>`).join("") || '<tr><td class="muted">No employees.</td></tr>'}
+      ${per.users.map((x) => `<tr><td><b>${esc(x.externalId)}</b></td><td>${esc(x.plan.name)}</td><td>${x.deleted ? `<span class="small">${x.used} used</span> <span class="tag bad">deleted</span> <span class="small muted">${esc(x.note)}</span>` : allowance(x)}</td></tr>`).join("") || '<tr><td class="muted">No employees.</td></tr>'}
     </table></div></section>
     <section class="card"><h2>Request history</h2><div class="scroll"><table>${historyTable(hist.history.items)}</table></div>
       ${pager("hist-page", h.offset, h.limit, h.returned, h.total)}</section>`;

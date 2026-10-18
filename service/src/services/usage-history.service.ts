@@ -3,6 +3,7 @@ import { countConsumeHistory, listConsumeHistory } from "../repositories/consume
 import { BadRequestError, NotFoundError } from "../errors/app-error.js";
 import { monthStart, parseMonth, systemClock, type Clock } from "../lib/time.js";
 import { findAccountWithPlan } from "../repositories/accounts.repo.js";
+import { toRejection } from "../views/rejection.js";
 
 interface UsageHistoryInput {
   month?: string;
@@ -38,6 +39,10 @@ export async function getUsageHistory(
   return {
     period: windowStart.slice(0, 7),
     pagination: { limit: input.limit, offset: input.offset, returned: items.length, total },
-    items,
+    items: items.map(({ rejectScope, rejectRule, ...item }) => ({
+      ...item,
+      // Same shape as POST /v1/consume: null when accepted, otherwise { scope, rule, limit }.
+      rejection: toRejection({ ...item, rejectScope, rejectRule }),
+    })),
   };
 }

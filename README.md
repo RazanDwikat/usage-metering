@@ -7,7 +7,7 @@ allowances, records the decision, and counts the usage only if the request is ac
 
 - **Stack:** TypeScript (Node 22, Fastify, Drizzle ORM, Zod) and PostgreSQL 16. One service, one database.
 - **Example application:** a small web app ("Docs App") that calls the service with an account's API key.
-- **Tests:** 238 automated tests (unit, integration, concurrency). Load tests with k6.
+- **Tests:** 244 automated tests (unit, integration, concurrency). Load tests with k6.
 
 ## Contents
 
@@ -63,7 +63,8 @@ Both plans apply **together**: giving a user a bigger allowance never increases 
 ### API keys
 
 - `POST /v1/accounts` creates an account and returns its first API key **once** (format `mk_` + 43 characters). Only a
-  SHA-256 hash is stored; a lost key cannot be recovered, only replaced.
+  SHA-256 hash is stored, so a lost key cannot be read back. If an account loses **all** of its keys, the operator issues a
+  new one with `POST /v1/accounts/:id/api-keys` (admin token); the other keys of the account stay valid.
 - Creating accounts is a bootstrap operation protected by the `X-Admin-Token` header (value of `ADMIN_TOKEN`). The
   service has no end-user login or roles, by design.
 - Every other endpoint needs `X-API-Key`. A missing, malformed, unknown or revoked key gets `401 invalid_api_key`.
@@ -97,6 +98,7 @@ All bodies and responses are JSON. Errors always look like `{"error":{"code","me
 | Method & path | Auth | Purpose |
 |---|---|---|
 | `POST /v1/accounts` | admin token | Create an account (+ first API key). Body: `{name, planId?}` |
+| `POST /v1/accounts/:id/api-keys` | admin token | Recovery: issue a new key for an account that lost all its keys |
 | `GET /v1/account` | key | The account and its current plan |
 | `PUT /v1/account/plan` | key | Assign an account plan. Body: `{planId}` |
 | `GET / POST /v1/account/api-keys`, `DELETE /v1/account/api-keys/:id` | key | List, issue, revoke keys |
@@ -110,8 +112,8 @@ All bodies and responses are JSON. Errors always look like `{"error":{"code","me
 | `DELETE /v1/plans/:id` | key | Archive a custom plan (refused while assigned) |
 | **`POST /v1/consume`** | key | **Consume units for a user.** Body: `{requestId, externalId, units}` |
 | `GET /v1/usage?month=YYYY-MM&externalId=` | key | Used / remaining for the account (and one user) |
-| `GET /v1/usage/users?month=&limit=&offset=` | key | Used / remaining for every user |
-| `GET /v1/usage/history?month=&externalId=&limit=&offset=` | key | Request outcomes (accepted and rejected), newest first (`limit` ≤ 100) |
+| `GET /v1/usage/users?month=&limit=&offset=` | key | Used / remaining for every user. Deleted users that used units in that month are listed last, with `deleted: true` and a `note` |
+| `GET /v1/usage/history?month=&externalId=&limit=&offset=` | key | Request outcomes (accepted and rejected), newest first (`limit` ≤ 100). Each item has the same `rejection` field as `/v1/consume` |
 
 `month` defaults to the current UTC month; use `YYYY-MM` for previous months.
 
@@ -153,12 +155,17 @@ Rejected (25 units against `maxPerRequest` 20; nothing is consumed):
 ```
 
 `rejection.scope` is `user` or `account`; `rejection.rule` is `max_per_request` or `monthly_allowance`; `limit` is the
-value of that rule. A rejection is an ordinary `200` (it is a decision, not an error).
+value of that rule. A rejection is an ordinary `200` (it is a decision, not an error). The request history uses the
+**same** `rejection` object (`null` for accepted requests), next to the limits and remaining values stored with the decision.
 
 ```bash
 curl -s "localhost:3000/v1/usage?externalId=alice"   -H "X-API-Key: $KEY"
 # {"usage":{"period":"2026-10","account":{"limit":10000,"used":10,"remaining":9990},
 #           "user":{"externalId":"alice","limit":50,"used":10,"remaining":40,…}}}
+# a deleted user still counts in the account total, so it is listed (last) with a note:
+curl -s "localhost:3000/v1/usage/users"              -H "X-API-Key: $KEY"
+# {"users":[{"externalId":"alice","used":10,…,"deleted":false,"note":null},
+#           {"externalId":"bob","used":5,"remaining":0,…,"deleted":true,"note":"This user was deleted. Their usage still counts toward the account total."}]}
 curl -s "localhost:3000/v1/usage/history?limit=5"    -H "X-API-Key: $KEY"
 ```
 
@@ -250,7 +257,8 @@ The brief leaves these open; this is what was chosen and applied consistently:
 2. **Months are UTC**, decided at processing time using the service clock. Usage is never moved between months.
 3. A user belongs to exactly one account; `externalId` is unique per account. Soft-deleting a user frees the id for
    re-registration (the new user starts at zero); the deleted user's past usage stays in the account total and its
-   history stays visible.
+   history stays visible. `GET /v1/usage/users` lists a deleted user (last, flagged `deleted`, remaining 0) in the months
+   where it used units, so the listed users always add up to the account total; in other months it is not listed.
 4. New accounts default to **Starter**, new users to **Basic**, unless a plan is given.
 5. A plan must have `maxPerRequest ≤ monthlyLimit` (otherwise the per-request limit could never be reached).
 6. Predefined plans are read-only; custom plans are private to the account that created them.
@@ -302,7 +310,7 @@ own key and isolated data.
 
 ## Tests
 
-238 automated tests against a real PostgreSQL (each test file gets its own freshly migrated database):
+244 automated tests against a real PostgreSQL (each test file gets its own freshly migrated database):
 
 - **unit** — rules, time/UTC month logic, API key helpers, config, retry logic
 - **integration** — accounts, users, plans, consume, usage, history, schema constraints, **API key validation and

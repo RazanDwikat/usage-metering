@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { Executor } from "../config/database.js";
 import { plans, usageCounters, users } from "../db/schema.js";
 
@@ -98,16 +98,36 @@ export async function getUsageCounter(
   return counter ?? null;
 }
 
-/** One page of active users with their plan and their usage in the given month (0 when they have no counter yet). */
+/**
+ * Which users appear in a month's usage list: every active user, plus deleted users that used units in that month
+ * (their usage is still part of the account total, so leaving them out would make the numbers not add up).
+ */
+function usageListUsers(accountId: string, windowStart: string) {
+  const counterJoin = and(
+    eq(usageCounters.accountId, users.accountId),
+    eq(usageCounters.userId, users.id),
+    eq(usageCounters.windowType, "month"),
+    eq(usageCounters.windowStart, windowStart),
+  );
+  const where = and(
+    eq(users.accountId, accountId),
+    or(isNull(users.deletedAt), isNotNull(usageCounters.id)),
+  );
+  return { counterJoin, where };
+}
+
+/** One page of users with their plan and their usage in the given month (0 when they have no counter yet). Deleted users come last. */
 export async function listUsersUsage(
   ex: Executor,
   accountId: string,
   windowStart: string,
   page: { limit: number; offset: number },
 ) {
+  const { counterJoin, where } = usageListUsers(accountId, windowStart);
   return ex
     .select({
       externalId: users.externalId,
+      deletedAt: users.deletedAt,
       planId: plans.id,
       planName: plans.name,
       monthlyLimit: plans.monthlyLimit,
@@ -115,17 +135,16 @@ export async function listUsersUsage(
     })
     .from(users)
     .innerJoin(plans, eq(users.planId, plans.id))
-    .leftJoin(
-      usageCounters,
-      and(
-        eq(usageCounters.accountId, users.accountId),
-        eq(usageCounters.userId, users.id),
-        eq(usageCounters.windowType, "month"),
-        eq(usageCounters.windowStart, windowStart),
-      ),
-    )
-    .where(and(eq(users.accountId, accountId), isNull(users.deletedAt)))
-    .orderBy(desc(users.createdAt), desc(users.id))
+    .leftJoin(usageCounters, counterJoin)
+    .where(where)
+    .orderBy(sql`(${users.deletedAt} IS NOT NULL)`, desc(users.createdAt), desc(users.id))
     .limit(page.limit)
     .offset(page.offset);
+}
+
+/** How many users {@link listUsersUsage} lists for that month (the pagination total). */
+export async function countUsersUsage(ex: Executor, accountId: string, windowStart: string): Promise<number> {
+  const { counterJoin, where } = usageListUsers(accountId, windowStart);
+  const [row] = await ex.select({ n: count() }).from(users).leftJoin(usageCounters, counterJoin).where(where);
+  return row?.n ?? 0;
 }

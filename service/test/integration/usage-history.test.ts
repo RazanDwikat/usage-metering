@@ -110,7 +110,9 @@ describe("GET /v1/usage/history — request history", () => {
       accountMaxPerRequest: expect.any(Number),
       userMonthlyLimit: expect.any(Number),
       userMaxPerRequest: expect.any(Number),
+      rejection: null, // same field as POST /v1/consume: null when accepted
     });
+    expect(result.items[0].rejection).toEqual(consumeRes.json().rejection);
     expect(result.pagination).toMatchObject({
       limit: 20,
       offset: 0,
@@ -141,8 +143,11 @@ describe("GET /v1/usage/history — request history", () => {
 
     expect(item).toBeDefined();
     expect(item.accepted).toBe(false);
-    expect(item.rejectScope).toBeTruthy();
-    expect(item.rejectRule).toBeTruthy();
+    // Same shape as the answer of POST /v1/consume.
+    expect(item.rejection).toEqual(consumeRes.json().rejection);
+    expect(item.rejection).toMatchObject({ scope: "user", rule: "max_per_request", limit: 20 });
+    expect(item).not.toHaveProperty("rejectScope");
+    expect(item).not.toHaveProperty("rejectRule");
   });
 
   it("filters history by externalId", async () => {

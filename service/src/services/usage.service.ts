@@ -1,7 +1,7 @@
 import type { Db } from "../config/database.js";
 import { findAccountWithPlan } from "../repositories/accounts.repo.js";
-import { getUsageCounter, listUsersUsage } from "../repositories/usage.repo.js";
-import { countActiveUsers, findUserByExternalId } from "../repositories/users.repo.js";
+import { countUsersUsage, getUsageCounter, listUsersUsage } from "../repositories/usage.repo.js";
+import { findUserByExternalId } from "../repositories/users.repo.js";
 import { findPlanById } from "../repositories/plans.repo.js";
 import { BadRequestError, NotFoundError } from "../errors/app-error.js";
 import { remaining } from "../rules/monthly-allowance.js";
@@ -92,7 +92,11 @@ interface UsersUsageInput {
   offset: number;
 }
 
-/** Usage of every active user in a month. Limits shown are those of each user's CURRENT plan. */
+/**
+ * Usage of every user in a month. Limits shown are those of each user's CURRENT plan.
+ * Deleted users that used units in that month are listed too (flagged, with a note), so the users add up to the
+ * account total; a deleted user can no longer consume, so its remaining allowance is 0.
+ */
 export async function getUsersUsage(db: Db, accountId: string, input: UsersUsageInput, now: Clock = systemClock) {
   const windowStart = input.month ? parseMonth(input.month) : monthStart(now());
   if (!windowStart) {
@@ -102,18 +106,24 @@ export async function getUsersUsage(db: Db, accountId: string, input: UsersUsage
   const page = { limit: input.limit, offset: input.offset };
   const [rows, total] = await Promise.all([
     listUsersUsage(db, accountId, windowStart, page),
-    countActiveUsers(db, accountId),
+    countUsersUsage(db, accountId, windowStart),
   ]);
 
   return {
     period: windowStart.slice(0, 7),
     pagination: { ...page, total },
-    users: rows.map((r) => ({
-      externalId: r.externalId,
-      plan: { id: r.planId, name: r.planName },
-      limit: r.monthlyLimit,
-      used: r.used,
-      remaining: remaining(r.monthlyLimit, r.used),
-    })),
+    users: rows.map((r) => {
+      const deleted = r.deletedAt !== null;
+      return {
+        externalId: r.externalId,
+        plan: { id: r.planId, name: r.planName },
+        limit: r.monthlyLimit,
+        used: r.used,
+        remaining: deleted ? 0 : remaining(r.monthlyLimit, r.used),
+        deleted,
+        deletedAt: r.deletedAt?.toISOString() ?? null,
+        note: deleted ? "This user was deleted. Their usage still counts toward the account total." : null,
+      };
+    }),
   };
 }

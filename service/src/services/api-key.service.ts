@@ -1,7 +1,7 @@
 import type { Db } from "../config/database.js";
 import { ConflictError, NotFoundError } from "../errors/app-error.js";
 import { generateApiKey } from "../lib/api-key.js";
-import { lockAccount } from "../repositories/accounts.repo.js";
+import { findAccountWithPlan, lockAccount } from "../repositories/accounts.repo.js";
 import {
   countActiveApiKeys,
   findApiKey,
@@ -34,6 +34,17 @@ export async function createApiKey(db: Db, accountId: string) {
   const { key, hash, prefix } = generateApiKey();
   const row = await insertApiKey(db, { accountId, keyHash: hash, prefix });
   return { ...toView(row), key }; // the secret is shown only now
+}
+
+/**
+ * Operator recovery: issues a key for an account that has lost all of its keys (a normal key holder rotates with
+ * createApiKey instead). Existing keys stay valid; the new one is shown only now.
+ */
+export async function issueApiKeyForAccount(db: Db, accountId: string) {
+  if (!(await findAccountWithPlan(db, accountId))) {
+    throw new NotFoundError("account_not_found", "Account not found");
+  }
+  return createApiKey(db, accountId);
 }
 
 /** Revokes a key. Idempotent. Refuses to revoke the account's last active key, which would lock it out for good. */

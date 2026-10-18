@@ -47,7 +47,7 @@ const reason = ({ scope, rule, limit }) => `${scope === "account" ? "company" : 
 const resultTag = (h) =>
   h.accepted
     ? '<span class="tag ok">accepted</span>'
-    : `<span class="tag bad">rejected</span> <span class="small muted">${h.rejectScope === "account" ? "company" : "user"} ${h.rejectRule === "max_per_request" ? "per-request" : "monthly"}</span>`;
+    : `<span class="tag bad">rejected</span> <span class="small muted">${h.rejection.scope === "account" ? "company" : "user"} ${h.rejection.rule === "max_per_request" ? "per-request" : "monthly"} (${h.rejection.limit})</span>`;
 const historyTable = (items) =>
   items.length
     ? `<tr><th>Time</th><th>User</th><th>Units</th><th>Result</th><th>Company left</th><th>User left</th></tr>

@@ -10,6 +10,7 @@ import { ConflictError, NotFoundError } from "../errors/app-error.js";
 import { monthStart, systemClock, type Clock } from "../lib/time.js";
 import { evaluate } from "../rules/evaluate.js";
 import { remaining } from "../rules/monthly-allowance.js";
+import { toRejection, type RejectionSource } from "../views/rejection.js";
 
 export interface ConsumeInput {
   requestId: string;
@@ -19,32 +20,14 @@ export interface ConsumeInput {
 
 function toConsumeResult(
   replayed: boolean,
-  row: {
+  row: RejectionSource & {
     requestId: string;
     units: number;
     windowStart: string;
-    accepted: boolean;
-    rejectScope: "account" | "user" | null;
-    rejectRule: "monthly_allowance" | "max_per_request" | null;
     accountRemaining: number;
     userRemaining: number;
-    accountMonthlyLimit: number;
-    accountMaxPerRequest: number;
-    userMonthlyLimit: number;
-    userMaxPerRequest: number;
   },
 ) {
-  const rejectionLimit =
-    row.rejectScope === null || row.rejectRule === null
-      ? null
-      : row.rejectRule === "max_per_request"
-        ? row.rejectScope === "account"
-          ? row.accountMaxPerRequest
-          : row.userMaxPerRequest
-        : row.rejectScope === "account"
-          ? row.accountMonthlyLimit
-          : row.userMonthlyLimit;
-
   return {
     requestId: row.requestId,
     replayed,
@@ -55,14 +38,7 @@ function toConsumeResult(
       account: row.accountRemaining,
       user: row.userRemaining,
     },
-    rejection:
-      row.accepted || row.rejectScope === null || row.rejectRule === null
-        ? null
-        : {
-            scope: row.rejectScope,
-            rule: row.rejectRule,
-            limit: rejectionLimit,
-          },
+    rejection: toRejection(row),
   };
 }
 
