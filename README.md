@@ -205,7 +205,8 @@ account → rejected by the account's monthly allowance even if the user has ple
 ## Changing plans
 
 - Changes apply to **new** requests after the update succeeds. Editing a custom plan affects every account/user
-  assigned to it.
+  assigned to it. A request that is already being decided at the moment of the change may still be decided with the
+  previous account plan (see [Known limitations](#known-limitations)).
 - Switching a plan **keeps the units already consumed**; it never grants a fresh monthly allowance.
 - If an allowance is reduced below the current usage, `remaining` is **0** and consumption at that level is rejected
   until the allowance exceeds the usage again.
@@ -434,3 +435,10 @@ if a single account must have tight tail latency.
 - Limits shown for past months are those of the plan assigned now (the exact decision-time limits are in the history).
 - A rejected `requestId` is final; callers must use a new id to try again (documented above).
 - Performance numbers come from one development laptop and are indicative, not a capacity guarantee.
+
+- **Account plan switch during an in-flight request.** `consume` reads the account's plan without locking the account
+  row, then share-locks the plan. If `PUT /v1/account/plan` commits in that short window, that one request is decided
+  with the previous plan and recorded just after the switch. Requests that start after the update succeeds always use
+  the new plan. The user's plan does not have this gap (it is re-checked after the user row is locked and the request is
+  retried). The fix would be to share-lock the account row while reading its plan, at the cost of extra contention on
+  the hottest row; it was left out to keep the per-account throughput measured in [Performance](#performance).
