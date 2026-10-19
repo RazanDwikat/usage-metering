@@ -107,7 +107,7 @@ The HTML file is a static reference and is not served by the API; there is no `/
 npm exec --yes --package=@redocly/cli -c "redocly build-docs doc/openapi.yaml -o doc/api-docs.html"
 ```
 
-GitHub Actions builds and deploys the hosted page automatically when `doc/openapi.yaml` changes on `main`. To enable publishing, open the repository's **Settings → Pages** and set **Build and deployment → Source** to **GitHub Actions**. The first deployment can also be started from the **Actions** tab by running **Deploy API docs**.
+GitHub Actions builds and deploys the hosted page automatically when `doc/openapi.yaml` changes on `main`. Before the first deployment, open the repository's **Settings → Pages** and set **Build and deployment → Source** to **GitHub Actions**; Pages must be enabled for the repository. The workflow cannot enable Pages automatically using the default `GITHUB_TOKEN`. The first deployment can also be started from the **Actions** tab by running **Deploy API docs**.
 
 All bodies and responses are JSON. Errors always look like `{"error":{"code","message","details?"}}`.
 
