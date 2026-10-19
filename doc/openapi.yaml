@@ -1,0 +1,1243 @@
+openapi: 3.1.0
+info:
+  title: Usage Metering and Quota Service API
+  version: 0.1.0
+  description: |
+    OpenAPI documentation for the Usage Metering API.
+
+    Account-scoped endpoints identify the account from the `X-API-Key` header;
+    an account identifier is never supplied by the caller. Account creation and
+    operator key recovery use `X-Admin-Token`.
+
+    All request and response bodies are JSON unless the response is `204 No
+    Content`. Error responses use `{"error":{"code":"...","message":"..."}}`
+    and may include `details`.
+servers:
+  - url: http://localhost:3000
+    description: Local development
+tags:
+  - name: Health
+    description: Service health checks.
+  - name: Accounts
+    description: Account details and plan assignment.
+  - name: API keys
+    description: API key issuance, listing, and revocation.
+  - name: Users
+    description: User registration and plan assignment.
+  - name: Plans
+    description: Predefined and account-owned plans.
+  - name: Consumption
+    description: Usage decisions and idempotent consumption requests.
+  - name: Usage
+    description: Monthly account and user usage totals.
+  - name: Usage history
+    description: Historical accepted and rejected consumption decisions.
+paths:
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Check service and database availability
+      security: []
+      responses:
+        "200":
+          description: Service and database are available
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/accounts:
+    post:
+      tags: [Accounts]
+      operationId: createAccount
+      summary: Create an account and its first API key
+      description: "The API key is returned only once. If omitted, `planId` defaults to the predefined Starter account plan."
+      security:
+        - AdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAccountRequest"
+      responses:
+        "201":
+          description: Account created; keep the API key because it cannot be retrieved later
+          headers:
+            cache-control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateAccountResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/accounts/{id}/api-keys:
+    post:
+      tags: [API keys]
+      operationId: issueRecoveryApiKey
+      summary: Issue a recovery API key for an account
+      description: Operator-only recovery endpoint. Existing account keys remain valid.
+      security:
+        - AdminToken: []
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      responses:
+        "201":
+          description: New API key issued; the secret is shown only in this response
+          headers:
+            cache-control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apiKey]
+                properties:
+                  apiKey:
+                    $ref: "#/components/schemas/IssuedApiKey"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/account:
+    get:
+      tags: [Accounts]
+      operationId: getAccount
+      summary: Get the authenticated account and its current plan
+      security:
+        - ApiKey: []
+      responses:
+        "200":
+          description: Account details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account]
+                properties:
+                  account:
+                    $ref: "#/components/schemas/Account"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/account/plan:
+    put:
+      tags: [Accounts]
+      operationId: updateAccountPlan
+      summary: Assign a plan to the authenticated account
+      security:
+        - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [planId]
+              properties:
+                planId:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Updated account details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [account]
+                properties:
+                  account:
+                    $ref: "#/components/schemas/Account"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/account/api-keys:
+    get:
+      tags: [API keys]
+      operationId: listApiKeys
+      summary: List API keys belonging to the authenticated account
+      security:
+        - ApiKey: []
+      responses:
+        "200":
+          description: API keys; secret values are never included
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apiKeys]
+                properties:
+                  apiKeys:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApiKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [API keys]
+      operationId: createApiKey
+      summary: Issue an additional API key for the authenticated account
+      description: "Use for key rotation: deploy the new key before revoking the old key."
+      security:
+        - ApiKey: []
+      responses:
+        "201":
+          description: New key issued; the secret is shown only in this response
+          headers:
+            cache-control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [apiKey]
+                properties:
+                  apiKey:
+                    $ref: "#/components/schemas/IssuedApiKey"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/account/api-keys/{id}:
+    delete:
+      tags: [API keys]
+      operationId: revokeApiKey
+      summary: Revoke an API key
+      description: Revocation is idempotent, but the account's last active key cannot be revoked.
+      security:
+        - ApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      responses:
+        "204":
+          description: Key revoked
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/users:
+    post:
+      tags: [Users]
+      operationId: createUser
+      summary: Register a user under the authenticated account
+      description: "If `planId` is omitted, the predefined Basic user plan is assigned."
+      security:
+        - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    get:
+      tags: [Users]
+      operationId: listUsers
+      summary: List active users for the authenticated account
+      security:
+        - ApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/Limit200"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Paginated users
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [users, pagination]
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/User"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/users/{id}:
+    get:
+      tags: [Users]
+      operationId: getUser
+      summary: Get a user by ID
+      security:
+        - ApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      responses:
+        "200":
+          description: User details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Users]
+      operationId: deleteUser
+      summary: Soft-delete a user
+      description: User usage and request history are preserved. A deleted user cannot consume more units.
+      security:
+        - ApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      responses:
+        "204":
+          description: User deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/users/{id}/plan:
+    put:
+      tags: [Users]
+      operationId: updateUserPlan
+      summary: Change a user's plan
+      security:
+        - ApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [planId]
+              properties:
+                planId:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/plans:
+    get:
+      tags: [Plans]
+      operationId: listPlans
+      summary: List predefined and account-owned plans
+      security:
+        - ApiKey: []
+      responses:
+        "200":
+          description: Visible plans
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plans]
+                properties:
+                  plans:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PlanDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Plans]
+      operationId: createPlan
+      summary: Create an account-owned plan
+      description: "`maxPerRequest` must not exceed `monthlyLimit`."
+      security:
+        - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlanRequest"
+      responses:
+        "201":
+          description: Plan created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plan]
+                properties:
+                  plan:
+                    $ref: "#/components/schemas/PlanDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/plans/{id}:
+    get:
+      tags: [Plans]
+      operationId: getPlan
+      summary: Get a plan by ID
+      security:
+        - ApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      responses:
+        "200":
+          description: Plan details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plan]
+                properties:
+                  plan:
+                    $ref: "#/components/schemas/PlanDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      tags: [Plans]
+      operationId: updatePlan
+      summary: Update an account-owned plan
+      description: "At least one field is required. Predefined plans are read-only. If both limit fields are supplied, `maxPerRequest` cannot exceed `monthlyLimit`."
+      security:
+        - ApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePlanRequest"
+      responses:
+        "200":
+          description: Updated plan
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plan]
+                properties:
+                  plan:
+                    $ref: "#/components/schemas/PlanDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Plans]
+      operationId: archivePlan
+      summary: Archive an account-owned plan
+      description: A plan assigned to an active account or user cannot be archived.
+      security:
+        - ApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/UuidId"
+      responses:
+        "204":
+          description: Plan archived
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/consume:
+    post:
+      tags: [Consumption]
+      operationId: consumeUnits
+      summary: Decide and record a usage request
+      description: |
+        A rejection is a normal decision and returns HTTP 200 with `accepted:
+        false`; rejected requests consume no units. `requestId` is the
+        account-scoped idempotency key. A retry with the same ID and payload
+        returns the original decision with `replayed: true`; using the same ID
+        with a different payload returns 409.
+      security:
+        - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConsumeRequest"
+            examples:
+              consume:
+                value:
+                  requestId: doc-42
+                  externalId: alice
+                  units: 10
+      responses:
+        "200":
+          description: Accepted or rejected consumption decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsumeResult"
+              examples:
+                accepted:
+                  value:
+                    requestId: doc-42
+                    replayed: false
+                    accepted: true
+                    units: 10
+                    windowStart: "2026-10-01"
+                    remaining:
+                      account: 9990
+                      user: 40
+                    rejection: null
+                rejected:
+                  value:
+                    requestId: doc-43
+                    replayed: false
+                    accepted: false
+                    units: 25
+                    windowStart: "2026-10-01"
+                    remaining:
+                      account: 9990
+                      user: 40
+                    rejection:
+                      scope: user
+                      rule: max_per_request
+                      limit: 20
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/usage:
+    get:
+      tags: [Usage]
+      operationId: getUsage
+      summary: Get account usage and optionally one user's usage
+      description: "`month` defaults to the current UTC month. Supply `externalId` to include usage for one user."
+      security:
+        - ApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/Month"
+        - $ref: "#/components/parameters/ExternalId"
+      responses:
+        "200":
+          description: Usage for the selected period
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [usage]
+                properties:
+                  usage:
+                    $ref: "#/components/schemas/Usage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/usage/users:
+    get:
+      tags: [Usage]
+      operationId: getUsersUsage
+      summary: Get usage for every user
+      description: "`month` defaults to the current UTC month. Deleted users with usage in that month are included last."
+      security:
+        - ApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/Month"
+        - $ref: "#/components/parameters/Limit200"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Paginated user usage
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [period, pagination, users]
+                properties:
+                  period:
+                    $ref: "#/components/schemas/MonthValue"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+                  users:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UserUsage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/usage/history:
+    get:
+      tags: [Usage history]
+      operationId: getUsageHistory
+      summary: List consumption decisions for a month
+      description: "Returns accepted and rejected decisions, newest first. `month` defaults to the current UTC month."
+      security:
+        - ApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/Month"
+        - $ref: "#/components/parameters/ExternalId"
+        - name: limit
+          in: query
+          description: Number of records to return (default 20, maximum 100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Paginated request decisions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [period, pagination, items]
+                properties:
+                  period:
+                    $ref: "#/components/schemas/MonthValue"
+                  pagination:
+                    allOf:
+                      - $ref: "#/components/schemas/Pagination"
+                      - type: object
+                        required: [returned]
+                        properties:
+                          returned:
+                            type: integer
+                            minimum: 0
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UsageHistoryItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key identifying the account. Required for all account-scoped operations.
+    AdminToken:
+      type: apiKey
+      in: header
+      name: X-Admin-Token
+      description: Operator token used to create accounts and issue recovery keys.
+  parameters:
+    UuidId:
+      name: id
+      in: path
+      required: true
+      description: UUID of the account resource, user, plan, or API key named by the path.
+      schema:
+        type: string
+        format: uuid
+    Month:
+      name: month
+      in: query
+      required: false
+      description: UTC calendar month; defaults to the current UTC month.
+      schema:
+        $ref: "#/components/schemas/MonthValue"
+    ExternalId:
+      name: externalId
+      in: query
+      required: false
+      description: User identifier from the calling application.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
+    Limit200:
+      name: limit
+      in: query
+      required: false
+      description: Number of records to return (default 50, maximum 200)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: Number of records to skip
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+  responses:
+    BadRequest:
+      description: Invalid request, validation failure, or invalid plan limits
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            validation:
+              value:
+                error:
+                  code: validation_error
+                  message: Invalid request
+                  details:
+                    - path: units
+                      message: Invalid input
+    Unauthorized:
+      description: Missing or invalid API key or admin token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            invalidApiKey:
+              value:
+                error:
+                  code: invalid_api_key
+                  message: Missing or invalid X-API-Key
+    Forbidden:
+      description: Operation is forbidden, such as attempting to modify a predefined plan
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found or not visible to the authenticated account
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Request conflicts with existing state or idempotency rules
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    CreateAccountRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        planId:
+          type: string
+          format: uuid
+          description: Optional predefined account plan. Defaults to Starter.
+    CreateAccountResponse:
+      type: object
+      required: [account, apiKey]
+      properties:
+        account:
+          $ref: "#/components/schemas/Account"
+        apiKey:
+          $ref: "#/components/schemas/InitialApiKey"
+    Account:
+      type: object
+      required: [id, name, createdAt, plan]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        plan:
+          $ref: "#/components/schemas/Plan"
+    Plan:
+      type: object
+      required: [id, name, scope, monthlyLimit, maxPerRequest, predefined]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        scope:
+          type: string
+          enum: [account, user]
+        monthlyLimit:
+          type: integer
+          minimum: 1
+        maxPerRequest:
+          type: integer
+          minimum: 1
+        predefined:
+          type: boolean
+    PlanDetail:
+      allOf:
+        - $ref: "#/components/schemas/Plan"
+        - type: object
+          required: [archivedAt, createdAt, updatedAt]
+          properties:
+            archivedAt:
+              type: [string, "null"]
+              format: date-time
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+    User:
+      type: object
+      required: [id, externalId, createdAt, plan]
+      properties:
+        id:
+          type: string
+          format: uuid
+        externalId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        plan:
+          $ref: "#/components/schemas/Plan"
+    ApiKey:
+      type: object
+      required: [id, prefix, createdAt, revokedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        prefix:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: [string, "null"]
+          format: date-time
+    InitialApiKey:
+      type: object
+      required: [key, prefix]
+      properties:
+        key:
+          type: string
+          description: Secret key, returned only when the account is created.
+          example: mk_example-secret
+        prefix:
+          type: string
+    IssuedApiKey:
+      allOf:
+        - $ref: "#/components/schemas/ApiKey"
+        - type: object
+          required: [key]
+          properties:
+            key:
+              type: string
+              description: Secret key, returned only once when issued.
+              example: mk_example-secret
+    CreateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [externalId]
+      properties:
+        externalId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        planId:
+          type: string
+          format: uuid
+          description: Optional user plan. Defaults to Basic.
+    CreatePlanRequest:
+      type: object
+      additionalProperties: false
+      required: [name, scope, monthlyLimit, maxPerRequest]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        scope:
+          type: string
+          enum: [account, user]
+        monthlyLimit:
+          type: integer
+          minimum: 1
+        maxPerRequest:
+          type: integer
+          minimum: 1
+          description: Must not exceed monthlyLimit.
+    UpdatePlanRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        monthlyLimit:
+          type: integer
+          minimum: 1
+        maxPerRequest:
+          type: integer
+          minimum: 1
+          description: Must not exceed monthlyLimit when both limit fields are supplied.
+    ConsumeRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId, externalId, units]
+      properties:
+        requestId:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Account-scoped idempotency key.
+        externalId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        units:
+          type: integer
+          minimum: 1
+    ConsumeResult:
+      type: object
+      required: [requestId, replayed, accepted, units, windowStart, remaining, rejection]
+      properties:
+        requestId:
+          type: string
+        replayed:
+          type: boolean
+        accepted:
+          type: boolean
+        units:
+          type: integer
+        windowStart:
+          type: string
+          format: date
+          description: First day of the UTC month in which the request was processed.
+        remaining:
+          type: object
+          required: [account, user]
+          properties:
+            account:
+              type: integer
+              minimum: 0
+            user:
+              type: integer
+              minimum: 0
+        rejection:
+          oneOf:
+            - $ref: "#/components/schemas/Rejection"
+            - type: "null"
+    Rejection:
+      type: object
+      required: [scope, rule, limit]
+      properties:
+        scope:
+          type: string
+          enum: [account, user]
+        rule:
+          type: string
+          enum: [monthly_allowance, max_per_request]
+        limit:
+          type: integer
+          minimum: 1
+    Usage:
+      type: object
+      required: [period, account]
+      properties:
+        period:
+          $ref: "#/components/schemas/MonthValue"
+        account:
+          $ref: "#/components/schemas/UsageTotals"
+        user:
+          $ref: "#/components/schemas/UserUsageTotals"
+    UsageTotals:
+      type: object
+      required: [limit, used, remaining]
+      properties:
+        limit:
+          type: integer
+        used:
+          type: integer
+          minimum: 0
+        remaining:
+          type: integer
+          minimum: 0
+    UserUsageTotals:
+      allOf:
+        - $ref: "#/components/schemas/UsageTotals"
+        - type: object
+          required: [externalId]
+          properties:
+            externalId:
+              type: string
+    UserUsage:
+      type: object
+      required: [externalId, plan, limit, used, remaining, deleted, deletedAt, note]
+      properties:
+        externalId:
+          type: string
+        plan:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        limit:
+          type: integer
+        used:
+          type: integer
+          minimum: 0
+        remaining:
+          type: integer
+          minimum: 0
+        deleted:
+          type: boolean
+        deletedAt:
+          type: [string, "null"]
+          format: date-time
+        note:
+          type: [string, "null"]
+    UsageHistoryItem:
+      type: object
+      required:
+        - requestId
+        - externalId
+        - units
+        - windowStart
+        - accepted
+        - accountMonthlyLimit
+        - accountMaxPerRequest
+        - userMonthlyLimit
+        - userMaxPerRequest
+        - accountRemaining
+        - userRemaining
+        - createdAt
+        - rejection
+      properties:
+        requestId:
+          type: string
+        externalId:
+          type: string
+        units:
+          type: integer
+        windowStart:
+          type: string
+          format: date
+        accepted:
+          type: boolean
+        accountMonthlyLimit:
+          type: integer
+        accountMaxPerRequest:
+          type: integer
+        userMonthlyLimit:
+          type: integer
+        userMaxPerRequest:
+          type: integer
+        accountRemaining:
+          type: integer
+          minimum: 0
+        userRemaining:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        rejection:
+          oneOf:
+            - $ref: "#/components/schemas/Rejection"
+            - type: "null"
+    Pagination:
+      type: object
+      required: [limit, offset, total]
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+          minimum: 0
+    MonthValue:
+      type: string
+      pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
+      example: "2026-10"
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: |
+                Common codes include validation_error, invalid_month,
+                invalid_plan_limits, plan_scope_mismatch, bad_request,
+                invalid_api_key, invalid_admin_token, plan_read_only,
+                user_not_found, plan_not_found, user_plan_not_found,
+                account_not_found, api_key_not_found, route_not_found,
+                idempotency_key_reused, user_plan_changed, plan_in_use,
+                plan_name_already_exists, user_already_exists,
+                last_active_key, account_plan_unavailable,
+                user_plan_unavailable, internal_error.
+            message:
+              type: string
+            details:
+              description: Optional validation or conflict details.

@@ -1,10 +1,10 @@
 -- Initial schema. Requires PostgreSQL 15+ (NULLS NOT DISTINCT) and gen_random_uuid() (PG13+).
 
 CREATE TYPE plan_scope  AS ENUM ('account', 'user');
-CREATE TYPE window_type AS ENUM ('month');          -- 'day' can be added later with ALTER TYPE ... ADD VALUE
+CREATE TYPE window_type AS ENUM ('month');        
 CREATE TYPE rule_name   AS ENUM ('monthly_allowance', 'max_per_request');
 
--- accounts.plan_id FK is added after plans exists (circular reference)
+
 CREATE TABLE accounts (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name        text NOT NULL CHECK (length(name) BETWEEN 1 AND 200),
@@ -37,7 +37,7 @@ CREATE TABLE api_keys (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id  uuid NOT NULL REFERENCES accounts(id),
   key_hash    bytea NOT NULL UNIQUE,                 -- SHA-256 of the key
-  prefix      text NOT NULL,                         -- first chars, display only
+  prefix      text NOT NULL,                         
   created_at  timestamptz NOT NULL DEFAULT now(),
   revoked_at  timestamptz
 );
@@ -49,7 +49,7 @@ CREATE TABLE users (
   external_id text NOT NULL CHECK (length(external_id) BETWEEN 1 AND 200),
   plan_id     uuid NOT NULL,
   plan_scope  plan_scope NOT NULL DEFAULT 'user' CHECK (plan_scope = 'user'),
-  deleted_at  timestamptz,                           -- soft delete; external_id is never reused
+  deleted_at  timestamptz,                           -- soft delete;
   created_at  timestamptz NOT NULL DEFAULT now(),
   UNIQUE (account_id, external_id),
   UNIQUE (account_id, id),                           -- target for composite FKs

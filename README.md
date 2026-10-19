@@ -93,6 +93,22 @@ users. Rule: `maxPerRequest` cannot exceed `monthlyLimit`.
 
 ## API
 
+### Swagger / OpenAPI documentation
+
+The API reference is available in the [`doc` folder](./doc/):
+
+- Once GitHub Pages is enabled and the deployment workflow succeeds, browse the [hosted API documentation](https://razandwikat.github.io/usage-metering/).
+- [Open the generated HTML documentation](./doc/api-docs.html) in a browser. After cloning or downloading the repository, open this file from the folder on your computer. On Windows, you can also run `Start-Process doc\api-docs.html` from the repository root in PowerShell.
+- [Open the OpenAPI specification](./doc/openapi.yaml) to inspect or import it into an OpenAPI-compatible tool.
+
+The HTML file is a static reference and is not served by the API; there is no `/docs` endpoint. To regenerate it after changing the specification, run this command from the repository root:
+
+```bash
+npm exec --yes --package=@redocly/cli -c "redocly build-docs doc/openapi.yaml -o doc/api-docs.html"
+```
+
+GitHub Actions builds and deploys the hosted page automatically when `doc/openapi.yaml` changes on `main`. To enable publishing, open the repository's **Settings → Pages** and set **Build and deployment → Source** to **GitHub Actions**. The first deployment can also be started from the **Actions** tab by running **Deploy API docs**.
+
 All bodies and responses are JSON. Errors always look like `{"error":{"code","message","details?"}}`.
 
 | Method & path | Auth | Purpose |
