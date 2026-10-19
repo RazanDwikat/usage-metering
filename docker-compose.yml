@@ -21,7 +21,7 @@ services:
       NODE_ENV: production
       PORT: "3000"
       DATABASE_URL: postgres://metering:metering@db:5432/metering
-      # total Postgres connections = WEB_CONCURRENCY x DB_POOL_MAX (Postgres allows 100 by default)
+     
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
       DB_POOL_MAX: ${DB_POOL_MAX:-10}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
@@ -32,14 +32,14 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      # 127.0.0.1, not "localhost": in Alpine "localhost" can resolve to IPv6 (::1) while the server listens on IPv4 only
+     
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 3s
       timeout: 3s
       retries: 20
       start_period: 5s
 
-  # Example client app: http://localhost:8080
+ 
   client:
     build: ./client
     environment:
@@ -47,14 +47,13 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
       PORT: "8080"
     volumes:
-      - clientdata:/data # the demo companies and their API keys survive "docker compose down"
+      - clientdata:/data 
     ports:
       - "8080:8080"
     depends_on:
       service:
         condition: service_healthy
 
-  # Load tests (not started by "up"): docker compose --profile perf run --rm k6 run -e SCENARIO=hot_account /perf/load.js
   k6:
     image: grafana/k6:latest
     profiles: ["perf"]

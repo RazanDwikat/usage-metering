@@ -46,7 +46,7 @@ async function getUsableUserPlan(ex: Executor, accountId: string, planId?: strin
     throw new NotFoundError("plan_not_found", "Plan not found");
   }
 
-  // Shared lock: a concurrent archive must wait for this assignment, then sees the plan in use.
+  
   const plan = await findPlanByIdForShare(ex, selectedPlan.id);
 
   if (!plan || plan.archivedAt !== null) {

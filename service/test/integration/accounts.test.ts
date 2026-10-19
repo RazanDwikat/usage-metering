@@ -5,7 +5,7 @@ import { createTestApp, type TestApp } from "../helpers/app.js";
 let h: TestApp;
 beforeAll(async () => {
   h = await createTestApp((app) => {
-    // test-only route to prove unexpected errors never leak details
+    
     app.get("/boom", async () => {
       throw new Error("secret database password is hunter2");
     });

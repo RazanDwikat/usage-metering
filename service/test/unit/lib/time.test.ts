@@ -15,9 +15,9 @@ describe("monthStart (UTC)", () => {
   });
 
   it("uses UTC, not the machine's timezone", () => {
-    // 2026-10-31 22:30 UTC is already Nov 1st in UTC+03:00 (Palestine) — must still be October.
+   
     expect(monthStart(new Date("2026-10-31T22:30:00Z"))).toBe("2026-10-01");
-    // 2026-11-01 00:30 in UTC+03:00 would be Oct 31 21:30 UTC — also October.
+   
     expect(monthStart(new Date("2026-11-01T00:30:00+03:00"))).toBe("2026-10-01");
   });
 });

@@ -50,14 +50,9 @@ function isUsablePlan(plan: PlanRow, scope: "account" | "user", accountId: strin
   );
 }
 
-/** How many times a request is re-run when the user's plan changed between our unlocked read and our lock. */
 const MAX_ATTEMPTS = 3;
 
-/**
- * Decides one consume request. Nothing is recorded by a failed attempt (the whole transaction rolls back),
- * so when the user's plan was switched while we were about to lock it we simply start over with the new plan:
- * the caller only sees a 409 `user_plan_changed` if the plan keeps changing under us for several attempts in a row.
- */
+
 export async function consume(db: Db, accountId: string, input: ConsumeInput, now: Clock = systemClock) {
   for (let attempt = 1; ; attempt++) {
     try {
@@ -71,8 +66,6 @@ export async function consume(db: Db, accountId: string, input: ConsumeInput, no
 
 async function consumeOnce(db: Db, accountId: string, input: ConsumeInput, now: Clock) {
   return db.transaction(async (tx) => {
-    // Serialize retries that use the same account/request ID.
-    // A hash collision only causes extra waiting; it does not affect correctness.
     const lockKey = `${accountId}:${input.requestId}`;
 
     await tx.execute(sql`
@@ -117,9 +110,6 @@ async function consumeOnce(db: Db, accountId: string, input: ConsumeInput, now: 
     const accountPlanId = accountData.account.planId;
     const userPlanId = initialUser.planId;
 
-    // Share-lock the plans: plan edits/archiving (exclusive) wait for in-flight consumes, but consumes never
-    // wait for each other here. (An exclusive lock would serialise every account on a shared predefined plan.)
-    // One statement locks both rows, always in id order.
     const planIds = [...new Set([accountPlanId, userPlanId])];
     const lockedPlans = new Map((await findPlansByIdsForShare(tx, planIds)).map((plan) => [plan.id, plan]));
 
@@ -155,9 +145,7 @@ async function consumeOnce(db: Db, accountId: string, input: ConsumeInput, now: 
 
     const windowStart = monthStart(now());
 
-    // Lock counters in one fixed order for every request: the user's counter, then the shared account counter.
-    // The account counter is the hot lock (every request of the account takes it), so it is taken as late as
-    // possible: the less work happens between taking it and COMMIT, the more requests per second one account can do.
+    
     const userCounter = await getOrCreateCounterForUpdate(tx, {
       accountId,
       userId: currentUser.id,
@@ -192,8 +180,7 @@ async function consumeOnce(db: Db, accountId: string, input: ConsumeInput, now: 
       usage,
     });
 
-    // Accepted requests report remaining quota after consumption.
-    // Rejected requests report the quota remaining before this attempt.
+    
     const accountRemaining = remaining(
       limits.account.monthlyLimit,
       usage.account + (decision.accepted ? input.units : 0),

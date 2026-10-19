@@ -92,11 +92,7 @@ interface UsersUsageInput {
   offset: number;
 }
 
-/**
- * Usage of every user in a month. Limits shown are those of each user's CURRENT plan.
- * Deleted users that used units in that month are listed too (flagged, with a note), so the users add up to the
- * account total; a deleted user can no longer consume, so its remaining allowance is 0.
- */
+
 export async function getUsersUsage(db: Db, accountId: string, input: UsersUsageInput, now: Clock = systemClock) {
   const windowStart = input.month ? parseMonth(input.month) : monthStart(now());
   if (!windowStart) {

@@ -1,10 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestApp, type TestApp } from "../helpers/app.js";
 
-/**
- * Concurrency guarantees of POST /v1/consume. Everything is fired with Promise.all against a real PostgreSQL,
- * so the requests really overlap (the test pool has 5 connections, the DB does the serialising).
- */
 let h: TestApp;
 
 beforeAll(async () => {
@@ -15,8 +11,7 @@ afterAll(async () => {
   await h.close();
 });
 
-type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-
+type Json = Record<string, any>; 
 async function post(url: string, headers: Record<string, string>, payload: object) {
   const res = await h.app.inject({ method: "POST", url, headers, payload });
   return { status: res.statusCode, body: res.json() as Json };

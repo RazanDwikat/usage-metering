@@ -180,13 +180,13 @@ describe("GET /v1/usage — UTC month boundaries", () => {
     const feb = await h.consume(s.key, "feb-1", "u1", 10);
     expect(feb.body).toMatchObject({ accepted: true, windowStart: "2026-02-01", remaining: { account: 990, user: 90 } });
 
-    // the current month (February) only knows about February...
+    
     const current = await h.usage(s.key, "?externalId=u1");
     expect(current.period).toBe("2026-02");
     expect(current.account).toMatchObject({ used: 10, remaining: 990 });
     expect(current.user).toMatchObject({ used: 10, remaining: 90 });
 
-    // ...and January is still there, untouched
+   
     const past = await h.usage(s.key, "?month=2026-01&externalId=u1");
     expect(past.account).toMatchObject({ used: 40, remaining: 960 });
     expect(past.user).toMatchObject({ used: 40, remaining: 60 });

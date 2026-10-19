@@ -14,7 +14,7 @@ afterAll(async () => {
 const q = <T extends Record<string, unknown> = Record<string, unknown>>(sql: string, p: unknown[] = []) =>
   t.pool.query<T>(sql, p);
 
-/** Runs a statement expected to violate a constraint; returns the pg error code. */
+
 async function failCode(sql: string, p: unknown[] = []): Promise<string> {
   try {
     await q(sql, p);

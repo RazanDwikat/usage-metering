@@ -24,7 +24,7 @@ export async function createAccount(db: Db, input: { name: string; planId?: stri
     if (!input.planId && !plan) {
       throw new Error(`Default plan "${DEFAULT_ACCOUNT_PLAN}" is missing: the seed did not run`);
     }
-    // A brand-new account has no custom plans yet, so only predefined plans can be chosen here.
+   
     if (!plan || plan.ownerAccountId !== null || plan.archivedAt !== null) {
       throw new NotFoundError("plan_not_found", "Plan not found");
     }
@@ -61,8 +61,7 @@ export async function getAccount(db: Db, accountId: string): Promise<AccountView
 
 export async function changeAccountPlan(db: Db, accountId: string, planId: string): Promise<AccountView> {
   return db.transaction(async (tx) => {
-    // Shared lock: a concurrent archive (which needs an exclusive lock) must wait for this
-    // assignment to commit, and will then see the plan is in use.
+    
     const plan = await findPlanByIdForShare(tx, planId);
 
     if (

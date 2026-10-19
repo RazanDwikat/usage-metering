@@ -13,13 +13,12 @@ export interface AppDeps {
   config: Config;
   pool: Pool;
   db: Db;
-  /** Defaults to the system clock; tests inject their own. */
   now?: Clock;
 }
 
 export function buildApp({ config, pool, db, now = systemClock }: AppDeps): FastifyInstance {
   const app = Fastify({
-    // LOG_LEVEL=silent|warn|info... Every request logs two lines, which costs CPU under load.
+    
     logger: process.env.NODE_ENV === "test" ? false : { level: process.env.LOG_LEVEL ?? "info" },
   });
   app.decorateRequest("accountId", "");

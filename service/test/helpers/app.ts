@@ -5,7 +5,7 @@ import { createTestDb, type TestDb } from "./db.js";
 
 export const ADMIN_TOKEN = "test-admin-token";
 
-export type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+export type Json = Record<string, any>; 
 export type Limits = { monthlyLimit: number; maxPerRequest: number };
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -22,13 +22,12 @@ export interface TestApp {
   app: FastifyInstance;
   t: TestDb;
   admin: { "x-admin-token": string };
-  /** Moves the service's clock to `date` (UTC). `setNow(null)` goes back to the real time. */
+ 
   setNow: (date: Date | string | null) => void;
-  /** One API call as the account that owns `key`: the status and the parsed JSON body (null when empty). */
+  
   call: (method: Method, url: string, key: string, payload?: object) => Promise<{ status: number; body: Json }>;
-  /** POST /v1/consume */
+  
   consume: (key: string, requestId: string, externalId: string, units: number) => Promise<{ status: number; body: Json }>;
-  /** GET /v1/usage -> the `usage` object */
   usage: (key: string, query?: string) => Promise<Json>;
   /** A fresh account on its own account plan and user plan with the given limits, plus users on that user plan. */
   scenario: (account: Limits, user: Limits, users?: string[]) => Promise<Scenario>;

@@ -29,17 +29,13 @@ export async function getApiKeys(db: Db, accountId: string): Promise<ApiKeyView[
   return (await listApiKeys(db, accountId)).map(toView);
 }
 
-/** Issues an additional key (key rotation: create the new one, deploy it, then revoke the old one). */
+
 export async function createApiKey(db: Db, accountId: string) {
   const { key, hash, prefix } = generateApiKey();
   const row = await insertApiKey(db, { accountId, keyHash: hash, prefix });
   return { ...toView(row), key }; // the secret is shown only now
 }
 
-/**
- * Operator recovery: issues a key for an account that has lost all of its keys (a normal key holder rotates with
- * createApiKey instead). Existing keys stay valid; the new one is shown only now.
- */
 export async function issueApiKeyForAccount(db: Db, accountId: string) {
   if (!(await findAccountWithPlan(db, accountId))) {
     throw new NotFoundError("account_not_found", "Account not found");
@@ -47,10 +43,10 @@ export async function issueApiKeyForAccount(db: Db, accountId: string) {
   return createApiKey(db, accountId);
 }
 
-/** Revokes a key. Idempotent. Refuses to revoke the account's last active key, which would lock it out for good. */
+
 export async function revokeApiKey(db: Db, accountId: string, keyId: string): Promise<void> {
   await db.transaction(async (tx) => {
-    // Serialise revocations per account so two requests cannot each leave "one other key" behind.
+    
     await lockAccount(tx, accountId);
 
     const key = await findApiKey(tx, accountId, keyId);

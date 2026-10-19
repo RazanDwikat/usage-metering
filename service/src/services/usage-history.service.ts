@@ -41,7 +41,7 @@ export async function getUsageHistory(
     pagination: { limit: input.limit, offset: input.offset, returned: items.length, total },
     items: items.map(({ rejectScope, rejectRule, ...item }) => ({
       ...item,
-      // Same shape as POST /v1/consume: null when accepted, otherwise { scope, rule, limit }.
+      
       rejection: toRejection({ ...item, rejectScope, rejectRule }),
     })),
   };

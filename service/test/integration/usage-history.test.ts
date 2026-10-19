@@ -124,8 +124,7 @@ describe("GET /v1/usage/history — request history", () => {
     const { apiKey } = await newAccount("history-rejected");
     const user = await createUser(apiKey.key, "history-rejected-employee");
 
-    // The default user plan has a maximum per-request limit.
-    // A deliberately oversized request should be rejected.
+    
     const consumeRes = await consume(apiKey.key, user.externalId, "history-rejected-request", 1_000_000);
 
     expect(consumeRes.statusCode).toBe(200);

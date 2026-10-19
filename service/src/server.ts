@@ -5,7 +5,6 @@ import { createDb, createPool } from "./config/database.js";
 import { runMigrations } from "./db/migrate.js";
 import { seedPredefinedPlans } from "./db/seed.js";
 
-/** Migrations + predefined plans. Runs exactly once per start (never in every worker). */
 async function prepareDatabase(config: Config) {
   const pool = createPool(config.DATABASE_URL, 2);
   try {
@@ -17,7 +16,7 @@ async function prepareDatabase(config: Config) {
   }
 }
 
-/** One HTTP server process (the whole service when WEB_CONCURRENCY=1, otherwise one cluster worker). */
+
 async function serve(config: Config) {
   const pool = createPool(config.DATABASE_URL, config.DB_POOL_MAX);
   const app = buildApp({ config, pool, db: createDb(pool) });
@@ -32,7 +31,6 @@ async function serve(config: Config) {
   process.on("SIGTERM", shutdown);
 }
 
-/** Primary process of a cluster: prepares the database once, forks the workers and keeps them alive. */
 async function supervise(config: Config) {
   await prepareDatabase(config);
 

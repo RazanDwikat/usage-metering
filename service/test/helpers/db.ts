@@ -16,7 +16,7 @@ export interface TestDb {
   drop: () => Promise<void>;
 }
 
-/** Creates a brand-new empty database, migrates + seeds it. Each test file gets its own. */
+
 export async function createTestDb(): Promise<TestDb> {
   const name = `metering_test_${randomBytes(4).toString("hex")}`;
   const admin = new pg.Client({ connectionString: BASE_URL });
