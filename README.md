@@ -341,15 +341,48 @@ docker run --rm --network usage-metering_default --mount "type=bind,source=$($PW
 
 ## Performance
 
+### Summary
+
+Same load (50 virtual users, 30 s), first working version compared with the final configuration:
+
+| Scenario | Throughput: first → final | p50 latency: first → final | p95 latency: first → final |
+|---|---:|---:|---:|
+| `distributed` (many accounts) | ~75 → **~400 req/s** (≈ 5×) | 630 → 113 ms | 840 → 213 ms |
+| `hot_account` (one shared counter) | ~49 → **~155 req/s** (≈ 3×) | 924 → 243 ms | 1.65 s → 864 ms |
+| `hot_user` (one user) | ~63 → **~135 req/s** (≈ 2×) | 814 → 359 ms | 945 → 485 ms |
+| `retry_storm` (parallel retries) | ~240 → **~1,000 req/s** (≈ 4×) | 171 → 38 ms | 326 → 77 ms |
+| Failed requests · wrong totals | 0 · 0 | | |
+
+Speed improved without touching correctness: **every run, before and after, ended with exact totals** (including
+the scenarios where the limit is reached while hundreds of requests compete). The first runs include some warm-up
+effects and the environment varies about ±20 % between runs, so treat the multipliers as approximate. The raw numbers
+of every step are in [`perf/results/history.md`](perf/results/history.md).
+
+What we found, in short:
+
+1. The first version was **CPU-bound, not lock-bound**: throughput did not grow with more virtual users and the Node
+   process sat at ~100 % of one core. We fixed it by doing less work per request (fewer queries, less logging) and by
+   using several processes.
+2. A **single hot account** is limited by one row lock to ~150 req/s. That is inherent to exact shared accounting;
+   more processes do not help it, and accounts do not slow each other down.
+3. The cheap, safe wins were measured one at a time; one tempting option (`synchronous_commit=off`) was **rejected**
+   because it trades durability for only ~20 %.
+
 ### How it was tested
 
 - **Tool:** [k6](https://k6.io) running inside Docker Compose (profile `perf`; nothing to install). Script: `perf/load.js`.
 - **Environment:** Windows laptop, Docker Desktop (8 CPUs, 3.7 GB), the service, PostgreSQL and k6 all on the same
   machine, so absolute numbers are modest and vary about ±20 % between runs. Compare runs **on the same machine**.
 - **Closed model:** 50 virtual users send requests back to back; every request is a real `POST /v1/consume`.
+- **Method:** each scenario ran for 30 s (the fixed-size `limit_*` and `retry_storm` scenarios run 5,000 requests).
+  Comparisons between configurations (for example 1 vs 4 processes) used a short discarded warm-up run and then
+  3 runs per setting. The k6 image is `grafana/k6:latest`; everything else is pinned by the compose file.
 - **Correctness is checked after every run**, not only speed: the script fails if any request is not `200`; and a
   `teardown` step asks the service for its own totals and verifies that no limit was exceeded, that each account's
   total equals the sum of its users, and (for the deterministic scenarios) the **exact** expected totals.
+- **Rules changing under load:** k6 measures speed and exact totals with fixed plans. Correctness while plans are
+  edited, switched or archived during a burst of requests is covered by the concurrency test suite
+  (`service/test/concurrency/`), not by k6.
 
 | Scenario | What it shows | Exact outcome that must hold |
 |---|---|---|
@@ -367,7 +400,9 @@ docker compose --profile perf run --rm k6 run -e SCENARIO=hot_account -e VUS=50 
 # PowerShell: $env:LOG_LEVEL="silent"; docker compose up -d service   (quieter, faster; see below)
 ```
 
-Each run writes its full metrics to `perf/results/<scenario>.json`.
+Each run writes its full metrics to `perf/results/<scenario>.json`. These files come from the **final** configuration
+(every run overwrites the previous one); the measurements of the earlier versions are kept in
+[`perf/results/history.md`](perf/results/history.md).
 
 ### Results (final configuration: 4 workers, `LOG_LEVEL=silent`, 50 VUs, 30 s)
 
@@ -387,11 +422,29 @@ is meaningful.)
 
 | Step | distributed | hot_account | Finding |
 |---|---:|---:|---|
-| Baseline (1 process, logging on, 17 queries/request) | ~75/s | ~49/s | Throughput did **not** grow with more virtual users (1 VU ≈ 63/s, 50 VUs ≈ 66/s): something serial. `docker stats` showed the Node process at ~100 % of one core. The service was **CPU-bound**, not lock-bound. |
+| Baseline (1 process, logging on, 17 queries/request) | ~75/s | ~49/s | Throughput did **not** grow with more virtual users (1 VU ≈ 63/s, 10 VUs ≈ 61/s, 50 VUs ≈ 66/s): something serial. `docker stats` during the run: Node service 80–98 % of one core, PostgreSQL 73–113 %, k6 ~13 %. The service was **CPU-bound**, not lock-bound. |
 | Fewer queries per request (17 → 13) | ~80 → ~155/s (10 VUs) | – | Share-lock both plans in one statement; lock the counter with a single `SELECT FOR UPDATE` and insert only on the first request of a month; increment both counters in one `UPDATE`. Same locks, same order. |
 | `LOG_LEVEL=silent` | ~155 → ~255/s (10 VUs) | – | Two log lines per request were expensive on Docker Desktop. Now configurable. |
 | 4 processes (`WEB_CONCURRENCY=4`) | 225 → **407/s** (1.8×, controlled A/B, 3 runs each) | no change (154 → 167) | State is in PostgreSQL, so processes do not need to coordinate. |
 | Account counter locked last | – | not measurable | Logical and free; kept, but its effect is inside the noise. |
+
+### What we changed in the code (and why each change is safe)
+
+Every change below was measured on its own (see `perf/results/history.md`) and kept only if it helped and did not
+weaken correctness. After every change the whole test suite and the exact-total checks of the load test were run again.
+
+| # | Change | Where | Before → after | Why it is safe |
+|---|---|---|---|---|
+| 1 | **Lock both plans in one statement** | `findPlansByIdsForShare` in `repositories/plans.repo.ts`, used by `consume.service.ts` | one `SELECT … FOR SHARE` per plan (2 statements) → one `WHERE id IN (…) ORDER BY id FOR SHARE` | Same share locks, still taken in id order, so plan edits still wait for in-flight requests and requests still never wait for each other. |
+| 2 | **Look the counter up first, insert only when missing** | `getOrCreateCounterForUpdate` in `repositories/usage.repo.ts` | `INSERT … ON CONFLICT DO NOTHING` + `SELECT … FOR UPDATE` for every counter (4 statements) → `SELECT … FOR UPDATE`, and the insert only on the first request of a month (2 statements) | The unique index still allows exactly one row per (account, user, month). Concurrent first requests both try `ON CONFLICT DO NOTHING`, then lock the same row. Covered by the concurrency tests (they start from empty counters). |
+| 3 | **Increment both counters in one statement** | `incrementCounters` in `repositories/usage.repo.ts` | two `UPDATE`s → one `UPDATE … WHERE id IN (account, user)` | Both rows are already locked `FOR UPDATE`, so nothing can change between the check and the update. |
+| 4 | **Configurable request logging** | `LOG_LEVEL` in `app.ts` and compose | two log lines per request always → default unchanged (`info`), `silent` for load tests | No effect on behaviour. Logging cost ~40 % of the throughput on Docker Desktop. |
+| 5 | **Several Node processes** | `WEB_CONCURRENCY` in `server.ts` and `config/env.ts` | 1 process → a primary that runs migrations and seed **once**, then forks N workers that share port 3000 (restarts a worker that dies, stops all on SIGTERM) | The service keeps no state in memory: counters, locks and history are in PostgreSQL, so two requests handled by different processes are serialised by the same row locks. Connections per process are limited (`DB_POOL_MAX`) so N × pool stays under Postgres' limit. |
+| 6 | **Take the shared account counter last** | order of the two `getOrCreateCounterForUpdate` calls in `consume.service.ts` | account counter, then user counter → user counter, then account counter | The order is the same for every request, so no deadlock is possible. It removes one statement from the time the hottest lock is held. Its effect was inside the measurement noise; kept because it is free. |
+
+Result: 17 → 13 statements per request (changes 1–3), ≈ 5× throughput for many accounts and ≈ 3× for one hot
+account (changes 1–5). Change 5 helps only when requests are spread over several accounts; one account is limited by
+its row lock, not by the CPU.
 
 **Bottlenecks understood**
 
@@ -439,7 +492,6 @@ if a single account must have tight tail latency.
 - Limits shown for past months are those of the plan assigned now (the exact decision-time limits are in the history).
 - A rejected `requestId` is final; callers must use a new id to try again (documented above).
 - Performance numbers come from one development laptop and are indicative, not a capacity guarantee.
-
 - **Account plan switch during an in-flight request.** `consume` reads the account's plan without locking the account
   row, then share-locks the plan. If `PUT /v1/account/plan` commits in that short window, that one request is decided
   with the previous plan and recorded just after the switch. Requests that start after the update succeeds always use
