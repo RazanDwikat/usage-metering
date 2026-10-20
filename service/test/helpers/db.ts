@@ -7,7 +7,7 @@ import { seedPredefinedPlans } from "../../src/db/seed.js";
 const BASE_URL =
   process.env.TEST_DATABASE_URL ??
   process.env.DATABASE_URL ??
-  "postgres://metering:metering@localhost:5432/metering";
+  "postgres://metering:metering@localhost:5433/metering";
 
 export interface TestDb {
   pool: Pool;
@@ -15,7 +15,6 @@ export interface TestDb {
   name: string;
   drop: () => Promise<void>;
 }
-
 
 export async function createTestDb(): Promise<TestDb> {
   const name = `metering_test_${randomBytes(4).toString("hex")}`;

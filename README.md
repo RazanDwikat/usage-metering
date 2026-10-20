@@ -11,12 +11,12 @@ allowances, records the decision, and counts the usage only if the request is ac
 
 ## Contents
 
-1. [Quick start](#quick-start) · 2. [Concepts](#concepts) · 3. [Predefined plans](#predefined-plans) ·
-4. [API](#api) · 5. [How a request is decided](#how-a-request-is-decided) · 6. [Changing plans](#changing-plans) ·
-7. [Retries](#retries-and-idempotency) · 8. [Concurrency design](#concurrency-design) · 9. [Data model](#data-model) ·
-10. [Product assumptions](#product-assumptions) · 11. [Example client](#example-client) ·
-12. [Configuration](#configuration) · 13. [Tests](#tests) · 14. [Performance](#performance) ·
-15. [Design decisions](#design-decisions-and-trade-offs) · 16. [Known limitations](#known-limitations)
+- [Quick start](#quick-start) · [Concepts](#concepts) · [Predefined plans](#predefined-plans) · [API](#api) ·
+  [How a request is decided](#how-a-request-is-decided) · [Changing plans](#changing-plans) ·
+  [Retries](#retries-and-idempotency) · [Concurrency design](#concurrency-design) · [Data model](#data-model) ·
+  [Product assumptions](#product-assumptions) · [Example client](#example-client) · [Configuration](#configuration) ·
+  [Tests](#tests) · [Performance](#performance) · [Design decisions](#design-decisions-and-trade-offs) ·
+  [Known limitations](#known-limitations)
 
 ---
 
@@ -430,8 +430,10 @@ is meaningful.)
 
 ### What we changed in the code (and why each change is safe)
 
-Every change below was measured on its own (see `perf/results/history.md`) and kept only if it helped and did not
-weaken correctness. After every change the whole test suite and the exact-total checks of the load test were run again.
+Changes 1–3 (fewer queries) were measured together; the logging option (4) and the extra processes (5) each on their
+own with the other settings fixed (see `perf/results/history.md`); the effect of change 6 could not be separated
+from measurement noise. The unit, integration and concurrency suites and the exact-total checks of the load test
+passed on the final code.
 
 | # | Change | Where | Before → after | Why it is safe |
 |---|---|---|---|---|
